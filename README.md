@@ -4,7 +4,8 @@ CookFast is a web application built with Next.js that helps you quickly generate
 
 ## ✨ Features
 
-*   **Multiple AI Providers:** Choose between Google Gemini, OpenAI (GPT-4o), and Anthropic Claude 3 models.
+*   **Multiple AI Providers:** Choose between Google Gemini, OpenAI, and Anthropic models.
+    *   Currently using: Google `gemini-2.5-pro-preview-03-25`, OpenAI `gpt-4o`, Anthropic `claude-3-7-sonnet-20250219` (models subject to future updates).
 *   **Flexible Document Selection:** Select the specific planning documents you need, such as:
     *   Project Requirements Document
     *   Frontend Guidelines
