@@ -49,7 +49,8 @@ export default function CookFastHome() {
   const [keyValidationStatus, setKeyValidationStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
   const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false); // For main generation
-  const [results, setResults] = useState<string | null>(null);
+  const [results, setResults] = useState<string | null>(null); // Success message
+  const [generatedMarkdown, setGeneratedMarkdown] = useState<string | null>(null); // State for generated content
   const [error, setError] = useState<string | null>(null); // For main generation errors
   const [darkMode, setDarkMode] = useState(false); // State for theme toggle
 
@@ -106,7 +107,7 @@ export default function CookFastHome() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Reset messages
-    setResults(null); setError(null);
+    setResults(null); setError(null); setGeneratedMarkdown(null); // Reset generated content too
     // Validation
     if (!userApiKey.trim()) { setError(`API Key for ${selectedProvider.toUpperCase()} is required.`); return; }
     if (!projectDetails.projectName.trim()) { setError(`Project Name is required.`); return; }
@@ -120,6 +121,7 @@ export default function CookFastHome() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
       setResults(data.message); // Show backend success message
+      setGeneratedMarkdown(data.content); // Store the generated markdown
        setKeyValidationStatus('idle'); // Reset validation status after successful generation
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -165,8 +167,8 @@ export default function CookFastHome() {
                 <fieldset>
                    <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Provider:</legend>
                    <div className="flex flex-wrap gap-x-6 gap-y-3">
-                       {/* Corrected: Use square brackets for array literal */} 
-                      {['gemini', 'openai', 'anthropic'].map((provider: AIProvider) => (
+                       {/* Corrected: Added commas and type assertion */}
+                      {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map((provider) => (
                           <div key={provider} className="flex items-center">
                              <input id={`provider-${provider}`} name="provider" type="radio" value={provider} checked={selectedProvider === provider} onChange={handleProviderChange} className="focus:ring-indigo-500 dark:focus:ring-indigo-400 h-4 w-4 text-indigo-600 dark:text-indigo-500 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700"/>
                              <label htmlFor={`provider-${provider}`} className="ml-2 block text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{provider}</label>
@@ -287,8 +289,13 @@ export default function CookFastHome() {
              {results && (
               <div className="p-5 bg-green-100 dark:bg-green-900/50 border border-green-300 dark:border-green-700/50 rounded-lg shadow text-green-800 dark:text-green-200">
                 <h3 className="font-semibold text-lg mb-2">Generation Successful!</h3>
-                <p className="text-sm">{results}</p>
-                {/* TODO: Add download button or display generated markdown here */}
+                <p className="text-sm mb-4">{results}</p>
+                {/* Display generated markdown content */}
+                {generatedMarkdown && (
+                  <pre className="mt-4 p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words overflow-auto max-h-96">
+                    <code>{generatedMarkdown}</code>
+                  </pre>
+                )}
               </div>
             )}
             {error && (

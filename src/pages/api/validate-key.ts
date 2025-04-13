@@ -28,7 +28,7 @@ export default async function handler(
     return res.status(400).json({ valid: false, error: 'Provider and API Key are required.' });
   }
 
-  console.log(`Attempting to validate key for provider: ${provider}`); // Log validation attempt
+  // console.log(`Attempting to validate key for provider: ${provider}`); // Log validation attempt - Removed for production
 
   try {
     // Removed unused 'isValid' variable. Success is implied if no error is thrown.
@@ -36,10 +36,11 @@ export default async function handler(
       case 'gemini':
         try {
           const genAI = new GoogleGenerativeAI(apiKey);
-          await genAI.listModels();
-          console.log("Gemini key validation successful (listed models).");
+          // Attempt to get a model instance to validate the key
+          genAI.getGenerativeModel({ model: "gemini-pro" });
+          // console.log("Gemini key validation successful (attempted to get model)."); // Removed for production
         } catch (err) {
-          console.error("Gemini validation error:", err);
+          // console.error("Gemini validation error:", err); // Keep error logging if desired, or replace with proper logger
           throw new Error(`Gemini key validation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
         break;
@@ -48,9 +49,9 @@ export default async function handler(
         try {
           const openai = new OpenAI({ apiKey });
           await openai.models.list();
-          console.log("OpenAI key validation successful (listed models).");
+          // console.log("OpenAI key validation successful (listed models)."); // Removed for production
         } catch (err) {
-           console.error("OpenAI validation error:", err);
+           // console.error("OpenAI validation error:", err); // Keep error logging if desired, or replace with proper logger
             let specificError = "";
             if (err instanceof OpenAI.APIError) {
                  specificError = ` (Status: ${err.status}, Type: ${err.type})`;
@@ -70,12 +71,13 @@ export default async function handler(
             max_tokens: 1,
             messages: [{ role: 'user', content: 'hello' }],
           });
-          console.log("Anthropic key validation successful (sent test message).");
+          // console.log("Anthropic key validation successful (sent test message)."); // Removed for production
         } catch (err) {
-           console.error("Anthropic validation error:", err);
+           // console.error("Anthropic validation error:", err); // Keep error logging if desired, or replace with proper logger
             let specificError = "";
              if (err instanceof Anthropic.APIError) {
-                 specificError = ` (Status: ${err.status}, Type: ${err.type})`;
+                 // Use err.name instead of err.type
+                 specificError = ` (Status: ${err.status}, Name: ${err.name})`;
              }
             if (err instanceof Anthropic.AuthenticationError || (err instanceof Anthropic.APIError && (err.status === 401 || err.status === 403))) {
                  throw new Error(`Anthropic key validation failed: Invalid API Key.`);
@@ -93,7 +95,7 @@ export default async function handler(
 
   } catch (error) {
     // Catch errors thrown from the switch cases
-    console.error("Validation API Error:", error);
+    // console.error("Validation API Error:", error); // Keep error logging if desired, or replace with proper logger
     return res.status(400).json({ valid: false, error: error instanceof Error ? error.message : 'Validation failed.' });
   }
 }

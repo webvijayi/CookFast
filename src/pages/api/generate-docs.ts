@@ -3,7 +3,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { rateLimit } from '../../utils/rate-limiter'; // Assuming you have a rate limiter utility
+import { rateLimit } from '../../utils/rate-limiter';
+
+// Initialize the rate limiter (e.g., 10 requests per minute per IP)
+const limiter = rateLimit({
+  interval: 60 * 1000, // 60 seconds
+  uniqueTokenPerInterval: 500, // Max 500 unique IPs per interval
+});
+
 
 // Interfaces
 interface ProjectDetails {
@@ -118,14 +125,14 @@ export default async function handler(
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  // Apply rate limiting (assuming you have this utility)
+  // Apply rate limiting
   try {
-    await rateLimit(req, res);
-  } catch (error) {
-    return res.status(429).json({ 
-      error: 'Too many requests, please try again later.',
-      code: 'RATE_LIMIT_EXCEEDED'
-    });
+    // Use IP address as the unique token for rate limiting
+    const token = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown-ip';
+    await limiter.check(res, 10, token); // Limit to 10 requests per interval (defined above)
+  } catch {
+    // The limiter.check function already handles sending the 429 response
+    return; // Stop execution if rate limited
   }
 
   // Declare provider variable here, allowing it to be accessible in catch block
@@ -188,8 +195,8 @@ export default async function handler(
 
     const prompt = buildPrompt(projectDetails, selectedDocs);
     let generatedText: string | null = null;
-    
-    console.log(`Received request. Provider: ${provider}, Project: ${projectDetails.projectName}`);
+
+    // console.log(`Received request. Provider: ${provider}, Project: ${projectDetails.projectName}`); // Removed for production
 
     // Set timeout for API calls to prevent hanging requests
     const requestTimeout = 60000; // 60 seconds
@@ -303,9 +310,10 @@ export default async function handler(
           
           let specificError = "";
           if (err instanceof Anthropic.APIError) {
-            specificError = ` (Status: ${err.status}, Type: ${err.type})`;
+            // Use err.name instead of err.type
+            specificError = ` (Status: ${err.status}, Name: ${err.name})`;
           }
-          
+
           throw new Error(`Anthropic API request failed: ${err instanceof Error ? err.message : String(err)}${specificError}`);
         }
         break;
@@ -318,9 +326,9 @@ export default async function handler(
     }
 
     if (generatedText) {
-      console.log(`Successfully generated content using ${provider}. Length: ${generatedText.length}`);
+      // console.log(`Successfully generated content using ${provider}. Length: ${generatedText.length}`); // Removed for production
       // Include the generated content in the response
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: `Successfully generated documentation using ${provider}!`,
         content: generatedText
       }); 
@@ -329,8 +337,8 @@ export default async function handler(
     }
 
   } catch (error) {
-    console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error);
-    
+    // console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error); // Keep error logging if desired, or replace with proper logger
+
     const message = error instanceof Error ? error.message : 'An unknown error occurred';
     const errorCode = error instanceof Error && 'code' in error ? (error as any).code : 'INTERNAL_SERVER_ERROR';
     
