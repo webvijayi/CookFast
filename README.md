@@ -55,6 +55,10 @@ CookFast is a web application built with Next.js that helps you quickly generate
 
 4.  Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
+## 🌐 Live Demo
+
+**(Add your Netlify deployment URL here once deployed)**
+
 ### How to Use
 
 1.  Select your preferred AI Provider (Gemini, OpenAI, or Anthropic).
@@ -66,9 +70,21 @@ CookFast is a web application built with Next.js that helps you quickly generate
 
 ---
 
-## Contributing
+## ❤️ Support & Contribution
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request on the [GitHub repository](https://github.com/webvijayi/CookFast). (Update link if necessary)
+Found CookFast helpful? Here are a few ways you can support the project:
+
+*   ⭐ **Star the Repository:** If you like the project, please star it on [GitHub](https://github.com/webvijayi/CookFast)! It helps with visibility.
+*   ☕ **Donate:** Support the development by buying me a coffee! <br> **<a href="https://buymeacoffee.com/lokeshmotwani" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 145px !important;" ></a>**
+*   🐞 **Report Bugs / Suggest Features:** Found a bug or have an idea? Open an issue on the [GitHub Issues page](https://github.com/webvijayi/CookFast/issues).
+*   🤝 **Contribute Code:** Pull requests are welcome! Feel free to fork the repository and submit your improvements.
+*   📧 **Contact:** For other inquiries, you can reach out to **care [at] webvijayi [dot] com**.
+
+---
+
+## 🚀 Deployment
+
+This application is configured for deployment on platforms like Netlify or Vercel which support Next.js applications with API routes.
 
 ---
 
@@ -78,9 +94,3 @@ To learn more about the underlying Next.js framework, take a look at the followi
 
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
-
-## Deploy on Vercel (Default Next.js Info)
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out the [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
