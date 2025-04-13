@@ -160,7 +160,8 @@ export default function CookFastHome() {
 
 
   return (
-    <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${darkMode ? 'dark' : ''} bg-gradient-to-br from-gray-100 to-blue-100 dark:from-slate-900 dark:to-slate-800 text-gray-900 dark:text-gray-200`}>
+    // Removed conditional 'dark' class here; it should rely on the class on <html>
+    <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 bg-gradient-to-br from-gray-100 to-blue-100 dark:from-slate-900 dark:to-slate-800 text-gray-900 dark:text-gray-200`}>
 
       {/* Floating Theme Toggle Button */}
         <button
@@ -345,13 +346,19 @@ export default function CookFastHome() {
          <p className="mb-2">
             An Opensource Tool by <a href="https://webvijayi.com/" target="_blank" rel="noopener noreferrer" className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">Web Vijayi</a>
          </p>
-         <div className="flex justify-center items-center space-x-4 text-xs">
-             <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center">
-                View Source <GitHubIcon />
+         {/* Updated Footer Links */}
+         <div className="flex flex-col sm:flex-row justify-center items-center space-y-3 sm:space-y-0 sm:space-x-6 text-xs mt-4">
+             {/* Star on GitHub */}
+             <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center font-medium px-3 py-1 rounded-md bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600">
+                <GitHubIcon /> <span className="ml-1.5">Star on GitHub</span>
              </a>
-             <span className="text-gray-400 dark:text-slate-600">|</span>
+             {/* Buy Me A Coffee */}
+             <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer" title="Support the project!">
+                <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-8 w-auto" /> {/* Adjusted height */}
+             </a>
+             {/* Contribute/Issue */}
              <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                Contribute / Report Issue
+                Report Issue / Contribute
              </a>
          </div>
       </footer>
