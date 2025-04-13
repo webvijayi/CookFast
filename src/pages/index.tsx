@@ -173,10 +173,13 @@ export default function CookFastHome() {
 
       {/* Header */}
       <header className="pt-8 pb-6 text-center">
-         {/* Reverted H1 structure to fix hydration error */}
-         <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 text-transparent bg-clip-text">
-           🍳🚀 CookFast
-         </h1>
+         {/* Emojis as separate element before H1 for reliable rendering */}
+         <div className="text-5xl mb-2 flex justify-center items-center"> {/* Container for alignment */}
+           <span className="mr-3">🍳🚀</span> {/* Emojis */}
+           <h1 className="font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 text-transparent bg-clip-text inline"> {/* Apply font-bold and gradient here */}
+             CookFast
+           </h1>
+         </div>
          <p className="text-xl text-gray-600 dark:text-gray-400">AI-Powered Project Planning Documents</p>
       </header>
 
@@ -255,7 +258,7 @@ export default function CookFastHome() {
                  <div className="sm:col-span-3">
                      <label htmlFor="projectType" className="block text-sm font-medium mb-1">Project Type</label>
                      <select id="projectType" name="projectType" value={projectDetails.projectType} onChange={handleDetailChange} className="block w-full p-2.5 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:focus:ring-indigo-400 dark:focus:border-indigo-400 bg-white dark:bg-slate-700 text-sm">
-                        <option>Web Application</option><option>Mobile App</option><option>API Service</option><option>Library/Package</option><option>Desktop Application</option><option>Other</option>
+                        <option>Web Application</option><option>Website</option><option>Mobile App</option><option>API Service</option><option>Library/Package</option><option>Desktop Application</option><option>Other</option>
                      </select>
                  </div>
                  <div className="sm:col-span-6">
