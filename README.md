@@ -1,4 +1,4 @@
-# 🚀 CookFast: AI-Powered Project Planning Documents 🛠️
+# 🍳🚀 CookFast: AI-Powered Project Planning Documents 🛠️
 
 CookFast is a web application built with Next.js that helps you quickly generate preliminary project planning documents using various AI models. Provide your project details, select the documents you need, choose your preferred AI provider (Gemini, OpenAI, or Anthropic), enter your API key, and CookFast will generate the Markdown documentation for you.
 

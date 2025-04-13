@@ -147,7 +147,7 @@ export default function CookFastHome() {
       {/* Header */}
       <header className="pt-8 pb-6 text-center">
          <h1 className="text-5xl font-bold mb-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 text-transparent bg-clip-text">
-           CookFast
+           🍳🚀 CookFast
          </h1>
          <p className="text-xl text-gray-600 dark:text-gray-400">AI-Powered Project Planning Documents</p>
       </header>
