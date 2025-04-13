@@ -219,7 +219,7 @@ export default function CookFastHome() {
                       ))}
                    </div>
                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
-                     Using: Google <code>gemini-2.5-pro-preview-03-25</code>, OpenAI <code>gpt-4o</code>, Anthropic <code>claude-3-7-sonnet-20250219</code> (models subject to change).
+                     Using: Google <code>gemini-2.5-pro-exp-03-25</code> (Experimental), OpenAI <code>gpt-4o</code>, Anthropic <code>claude-3-7-sonnet-20250219</code> (models subject to change).
                    </p>
                 </fieldset>
 

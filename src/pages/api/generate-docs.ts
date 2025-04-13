@@ -49,7 +49,7 @@ type ErrorResponse = {
 }
 
 // Constants
-const GEMINI_MODEL = "gemini-2.5-pro-preview-03-25"; // Updated based on user feedback
+const GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"; // Use Experimental model as Preview has no free tier
 const OPENAI_MODEL = "gpt-4o";  // Current model
 const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Updated based on user feedback
 
