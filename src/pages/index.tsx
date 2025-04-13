@@ -57,26 +57,37 @@ export default function CookFastHome() {
 
   // --- Theme Toggle Effect ---
    useEffect(() => {
-    // Check system preference on initial load
+    // Restore initial system preference check
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     setDarkMode(prefersDark);
-     // Add listener for system changes
-     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-     const handleChange = () => setDarkMode(mediaQuery.matches);
-     mediaQuery.addEventListener('change', handleChange);
-     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
+
+     // Keep listener commented out for now to isolate button click
+     // const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+     // const handleChange = () => setDarkMode(mediaQuery.matches);
+     // mediaQuery.addEventListener('change', handleChange);
+     // return () => mediaQuery.removeEventListener('change', handleChange);
+     return () => {}; // Return empty cleanup function
+  }, []); // Runs only once on mount
 
    useEffect(() => {
     // Apply class to HTML element
+    console.log(`Dark mode effect running. darkMode state: ${darkMode}`); // DEBUG LOG
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      console.log('Added dark class to html'); // DEBUG LOG
     } else {
       document.documentElement.classList.remove('dark');
+      console.log('Removed dark class from html'); // DEBUG LOG
     }
   }, [darkMode]);
 
-  const toggleDarkMode = () => setDarkMode(!darkMode);
+  const toggleDarkMode = () => {
+    console.log('toggleDarkMode function called'); // DEBUG LOG
+    setDarkMode(prevMode => {
+      console.log(`Setting darkMode state from ${prevMode} to ${!prevMode}`); // DEBUG LOG
+      return !prevMode;
+    });
+  }
   // --- End Theme Toggle ---
 
 

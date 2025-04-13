@@ -49,9 +49,9 @@ type ErrorResponse = {
 }
 
 // Constants
-const GEMINI_MODEL = "gemini-1.5-pro";  // Updated to newer model
-const OPENAI_MODEL = "gpt-4o";  // Updated to newer model
-const ANTHROPIC_MODEL = "claude-3-sonnet-20240229";
+const GEMINI_MODEL = "gemini-2.5-pro-preview-03-25"; // Updated based on user feedback
+const OPENAI_MODEL = "gpt-4o";  // Current model
+const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Updated based on user feedback
 
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -60,11 +60,11 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// Token limits per provider
+// Token limits per provider (Reduced for faster response / lower timeout risk)
 const TOKEN_LIMITS = {
-  gemini: 30720,   // Updated for gemini-1.5-pro
+  gemini: 8192,    // Reduced from 30720
   openai: 8192,    // For gpt-4o
-  anthropic: 100000 // For Claude 3
+  anthropic: 8192  // Reduced from 100000
 };
 
 // Helper Function to Build Prompt
