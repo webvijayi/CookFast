@@ -37,11 +37,14 @@ export default async function handler(
         try {
           const genAI = new GoogleGenerativeAI(apiKey);
           // Attempt to get a model instance to validate the key
+          // Attempt to get a model instance to validate the key
           genAI.getGenerativeModel({ model: "gemini-pro" });
           // console.log("Gemini key validation successful (attempted to get model)."); // Removed for production
         } catch (err) {
-          // console.error("Gemini validation error:", err); // Keep error logging if desired, or replace with proper logger
-          throw new Error(`Gemini key validation failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          // console.error("Gemini validation error:", err); // Optional: Keep for server-side debugging
+          // Ensure a standard Error is thrown for consistent handling
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          throw new Error(`Gemini key validation failed: ${errorMessage}`);
         }
         break;
 

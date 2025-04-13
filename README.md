@@ -57,7 +57,7 @@ CookFast is a web application built with Next.js that helps you quickly generate
 
 ## 🌐 Live Demo
 
-**(Add your Netlify deployment URL here once deployed)**
+**[https://cook-fast.netlify.app/](https://cook-fast.netlify.app/)**
 
 ### How to Use
 
