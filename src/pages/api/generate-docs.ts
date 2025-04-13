@@ -1,55 +1,51 @@
+/* eslint-disable */
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { rateLimit } from '../../utils/rate-limiter'; // Assuming you have a rate limiter utility
 
-// Define expected structure for the request body
+// Interfaces
+interface ProjectDetails {
+  projectName: string;
+  projectType: string;
+  projectGoal: string;
+  features: string;
+  techStack: string;
+}
+
+interface DocumentSelection {
+  requirements: boolean;
+  frontendGuidelines: boolean;
+  backendStructure: boolean;
+  appFlow: boolean;
+  techStackDoc: boolean;
+  systemPrompts: boolean;
+  fileStructure: boolean;
+}
+
 interface GenerateDocsRequestBody {
-  projectDetails: {
-    projectName: string;
-    projectType: string;
-    projectGoal: string;
-    features: string;
-    techStack: string;
-  };
-  selectedDocs: {
-    requirements: boolean;
-    frontendGuidelines: boolean;
-    backendStructure: boolean;
-    appFlow: boolean;
-    techStackDoc: boolean;
-    systemPrompts: boolean;
-    fileStructure: boolean;
-  };
+  projectDetails: ProjectDetails;
+  selectedDocs: DocumentSelection;
+  provider: 'gemini' | 'openai' | 'anthropic';
+  apiKey: string;
 }
 
-// Define possible response structures
-type Data = {
+type SuccessResponse = { 
   message: string;
-  // Optionally include generated file paths or content later
+  content: string; // Added to return the generated content
 }
 
-type ErrorResponse = {
-    error: string;
+type ErrorResponse = { 
+  error: string;
+  code?: string;
 }
 
+// Constants
+const GEMINI_MODEL = "gemini-1.5-pro";  // Updated to newer model
+const OPENAI_MODEL = "gpt-4o";  // Updated to newer model
+const ANTHROPIC_MODEL = "claude-3-sonnet-20240229";
 
-// --- Gemini API Configuration ---
-const MODEL_NAME = "gemini-1.0-pro"; // Or your desired model
-
-// IMPORTANT: Store your API key securely. Using environment variables is recommended.
-// Create a .env.local file in your project root with:
-// GEMINI_API_KEY=YOUR_API_KEY_HERE
-const API_KEY = process.env.GEMINI_API_KEY;
-
-if (!API_KEY) {
-  console.error("FATAL ERROR: GEMINI_API_KEY environment variable not set.");
-  // Optionally throw an error during build/startup in a real app
-}
-
-// Initialize the Generative AI client
-const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
-const model = genAI?.getGenerativeModel({ model: MODEL_NAME });
-
-// Safety settings for the Gemini API call
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -57,134 +53,290 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// --- Helper Function to Build Prompt ---
-function buildPrompt(details: GenerateDocsRequestBody['projectDetails'], docs: GenerateDocsRequestBody['selectedDocs']): string {
-    const selectedDocList = Object.entries(docs)
-        .filter(([, value]) => value)
-        .map(([key]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}`) // Format key nicely
-        .join('
-');
+// Token limits per provider
+const TOKEN_LIMITS = {
+  gemini: 30720,   // Updated for gemini-1.5-pro
+  openai: 8192,    // For gpt-4o
+  anthropic: 100000 // For Claude 3
+};
 
-    // More sophisticated prompt structure
-    return `
-Act as an expert technical writer and software architect.
-Your task is to generate preliminary planning documentation in Markdown format for a software project.
+// Helper Function to Build Prompt
+function buildPrompt(details: ProjectDetails, docs: DocumentSelection): string {
+  const selectedDocList = Object.entries(docs)
+    .filter(([, value]) => value)
+    .map(([key]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}`)
+    .join('\n');
+    
+  const mermaidExample = '```mermaid\nsequenceDiagram\n    participant User\n    participant Browser\n    participant Server\n    User->>Browser: Request page\n    Browser->>Server: GET /resource\n    Server-->>Browser: HTML page\n    Browser-->>User: Display page\n```';
 
-**Project Details:**
-*   **Project Name:** ${details.projectName || '(Not specified)'}
-*   **Project Type:** ${details.projectType || '(Not specified)'}
-*   **Main Goal/Purpose:** ${details.projectGoal || '(Not specified)'}
-*   **Key Features:** ${details.features || '(Not specified)'}
-*   **Known Tech Stack Hints:** ${details.techStack || '(Not specified)'}
+  let promptString = "Act as an expert technical writer and software architect specialized in creating comprehensive project planning documents.\n";
+  promptString += "Your task is to generate the requested preliminary planning documentation in **Markdown format** for the software project described below.\n\n";
+  promptString += "**Project Context:**\n";
+  promptString += `* **Project Name:** ${details.projectName || '(Not specified)'}\n`;
+  promptString += `* **Project Type:** ${details.projectType || '(Not specified)'}\n`;
+  promptString += `* **Main Goal/Purpose:** ${details.projectGoal || '(Not specified)'}\n`;
+  promptString += `* **Key Features:** ${details.features || '(Not specified)'}\n`;
+  promptString += `* **Known Tech Stack Hints:** ${details.techStack || '(Not specified)'}\n\n`;
+  promptString += "**Requested Documents:**\n";
+  promptString += `Generate the following documents, ensuring each starts with a clear Level 1 Markdown heading (e.g., '# Project Requirements Document'):\n${selectedDocList || '(No specific documents selected - provide a general project overview if possible)'}\n\n`;
+  promptString += "**Detailed Instructions & Formatting:**\n";
+  promptString += "* **Markdown Usage:** Utilize Markdown extensively for structure and readability (headings, subheadings, lists, bold/italics, code blocks for examples).\n";
+  promptString += `* **Diagrams (Optional but Recommended):** Where appropriate (e.g., App Flow, Backend Structure, Database Schema), embed diagrams using **Mermaid syntax** within Markdown code blocks. Suggest relevant diagram types (sequenceDiagram, classDiagram, erDiagram, flowchart). For example:\n${mermaidExample}\n`;
+  promptString += "* **Content Generation:**\n";
+  promptString += "    * Tailor the content specifically to the **Project Type** and **Key Features** provided.\n";
+  promptString += "    * Incorporate relevant **software development best practices** for each document (e.g., mention SMART criteria for requirements, REST principles for APIs, accessibility (WCAG) for frontend, MVC/MVVM patterns, security considerations, database normalization).\n";
+  promptString += "    * Provide practical, actionable starting points. If details are sparse, make logical assumptions based on the project type and state them clearly.\n";
+  promptString += "    * **System Prompts:** If AI interaction seems relevant based on the project description, explain the purpose of system prompts and provide illustrative examples. Otherwise, state that specific system prompts might not be applicable initially.\n";
+  promptString += "    * **File Structure:** Propose a standard, logical directory layout suitable for the project type and mentioned technologies. Explain the purpose of key folders.\n";
+  promptString += "* **Output Style:** Generate only the requested document content. Do not include conversational introductions, summaries, or remarks outside the documents themselves. Ensure the output is a single, valid Markdown block containing all requested sections.\n";
 
-**Requested Documents:**
-Please generate the following documents, ensuring each starts with a clear heading (e.g., '# Project Requirements Document'):
-${selectedDocList || '(No documents selected)'}
-
-**Instructions & Best Practices:**
-*   Use Markdown formatting extensively (headings, lists, code blocks, bold/italics).
-*   Where applicable (like App Flow or Backend Structure), consider using Mermaid syntax within Markdown code blocks for diagrams (e.g., sequenceDiagram, classDiagram, erDiagram).
-*   Tailor the content based on the project type and details provided.
-*   Incorporate common software development best practices relevant to each document type (e.g., mention REST principles for APIs, accessibility for frontend, MVC/MVVM patterns, database normalization hints).
-*   Provide practical, actionable starting points for each document. If details are sparse, make reasonable assumptions based on the project type.
-*   For 'System Prompts', explain its purpose and provide examples if AI interaction is implied by features/goal, otherwise state it might not be applicable.
-*   For 'File Structure', suggest a logical layout based on the project type and tech stack hints.
-
-**Output Format:**
-Combine all requested documents into a single Markdown response. Separate each document clearly with its main heading. Do not include introductory or concluding remarks outside the document content itself.
-    `;
+  return promptString;
 }
 
+// Function to validate API key format (basic check)
+function validateApiKey(provider: string, apiKey: string): boolean {
+  switch (provider) {
+    case 'openai':
+      return /^sk-[A-Za-z0-9]{32,}$/.test(apiKey);
+    case 'anthropic':
+      return /^sk-ant-[A-Za-z0-9]{24,}$/.test(apiKey);
+    case 'gemini':
+      return /^[A-Za-z0-9_-]{39}$/.test(apiKey);
+    default:
+      return false;
+  }
+}
 
-// --- API Handler ---
+// Main API Handler
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<Data | ErrorResponse>
+  res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
+  // Method verification
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  // Check if Gemini Client is initialized (API Key is present)
-  if (!genAI || !model) {
-      console.error("Gemini AI client not initialized. Check API Key.");
-      return res.status(500).json({ error: "Server configuration error: AI service unavailable." });
+  // Apply rate limiting (assuming you have this utility)
+  try {
+    await rateLimit(req, res);
+  } catch (error) {
+    return res.status(429).json({ 
+      error: 'Too many requests, please try again later.',
+      code: 'RATE_LIMIT_EXCEEDED'
+    });
   }
 
+  // Declare provider variable here, allowing it to be accessible in catch block
+  let provider: GenerateDocsRequestBody['provider'] | undefined;
+  
   try {
-    const { projectDetails, selectedDocs }: GenerateDocsRequestBody = req.body;
+    const { 
+      projectDetails, 
+      selectedDocs, 
+      apiKey, 
+      provider: reqProvider 
+    }: GenerateDocsRequestBody = req.body;
+    
+    // Assign the destructured provider to the outer scope variable
+    provider = reqProvider;
 
-    // Basic Input Validation
-    if (!projectDetails?.projectName) {
-      return res.status(400).json({ error: 'Project Name is required.' });
+    // Enhanced validation checks
+    if (!projectDetails) {
+      return res.status(400).json({ 
+        error: 'Project details are required', 
+        code: 'MISSING_PROJECT_DETAILS' 
+      });
     }
-    const anyDocSelected = Object.values(selectedDocs).some(isSelected => isSelected);
-    if (!anyDocSelected) {
-         return res.status(400).json({ error: 'Please select at least one document type to generate.' });
+
+    if (!projectDetails.projectName?.trim()) {
+      return res.status(400).json({ 
+        error: 'Project Name is required', 
+        code: 'MISSING_PROJECT_NAME' 
+      });
     }
 
+    if (!apiKey?.trim()) {
+      return res.status(400).json({ 
+        error: 'API Key is required', 
+        code: 'MISSING_API_KEY' 
+      });
+    }
 
-    // Build the prompt for the Gemini API
+    if (!provider || !['gemini', 'openai', 'anthropic'].includes(provider)) {
+      return res.status(400).json({ 
+        error: 'Invalid AI provider selected', 
+        code: 'INVALID_PROVIDER' 
+      });
+    }
+
+    if (!Object.values(selectedDocs).some(isSelected => isSelected)) {
+      return res.status(400).json({ 
+        error: 'Please select at least one document type', 
+        code: 'NO_DOCS_SELECTED' 
+      });
+    }
+
+    // Validate API key format
+    if (!validateApiKey(provider, apiKey)) {
+      return res.status(400).json({ 
+        error: `Invalid ${provider} API key format`, 
+        code: 'INVALID_API_KEY_FORMAT' 
+      });
+    }
+
     const prompt = buildPrompt(projectDetails, selectedDocs);
-    console.log("Sending prompt to Gemini API..."); // Avoid logging the full prompt in production if it contains sensitive info
+    let generatedText: string | null = null;
+    
+    console.log(`Received request. Provider: ${provider}, Project: ${projectDetails.projectName}`);
 
-    // --- Call Gemini API ---
-    const generationConfig = {
-        temperature: 0.7, // Adjust creativity/determinism
-        topK: 1,
-        topP: 1,
-        maxOutputTokens: 8192, // Adjust based on expected output size & model limits
-    };
+    // Set timeout for API calls to prevent hanging requests
+    const requestTimeout = 60000; // 60 seconds
 
-    const chat = model.startChat({
-        generationConfig,
-        safetySettings,
-        history: [], // Start a fresh chat session for each request
-    });
+    switch (provider) {
+      case 'gemini':
+        try {
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+          
+          const generationConfig = { 
+            temperature: 0.7, 
+            topK: 1, 
+            topP: 1, 
+            maxOutputTokens: TOKEN_LIMITS.gemini 
+          };
+          
+          const chat = model.startChat({ 
+            generationConfig, 
+            safetySettings, 
+            history: [] 
+          });
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+          
+          const result = await chat.sendMessage(prompt, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          
+          if (!result.response) {
+            throw new Error("Gemini API returned an empty or blocked response");
+          }
+          
+          generatedText = result.response.text();
+          
+          if (result.response?.promptFeedback?.blockReason) {
+            console.warn(`Gemini response potentially blocked. Reason: ${result.response.promptFeedback.blockReason}`);
+          }
+        } catch (err) { 
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error('Gemini API request timed out');
+          }
+          throw new Error(`Gemini API request failed: ${err instanceof Error ? err.message : String(err)}`); 
+        }
+        break;
 
-    const result = await chat.sendMessage(prompt); // Send the constructed prompt
+      case 'openai':
+        try {
+          const openai = new OpenAI({ apiKey });
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+          
+          const completion = await openai.chat.completions.create({
+            model: OPENAI_MODEL,
+            messages: [
+              { role: "system", content: "You are an expert technical writer generating Markdown project planning documents." }, 
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.7, 
+            max_tokens: TOKEN_LIMITS.openai,
+          }, { signal: controller.signal });
+          
+          clearTimeout(timeoutId);
+          
+          generatedText = completion.choices[0]?.message?.content || null;
+          
+          if (!generatedText) {
+            throw new Error("OpenAI API returned no content");
+          }
+        } catch (err) { 
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error('OpenAI API request timed out');
+          }
+          
+          let specificError = "";
+          if (err instanceof OpenAI.APIError) {
+            specificError = ` (Status: ${err.status}, Type: ${err.type}, Code: ${err.code})`;
+          }
+          
+          throw new Error(`OpenAI API request failed: ${err instanceof Error ? err.message : String(err)}${specificError}`); 
+        }
+        break;
 
-    // --- Process Response ---
-    if (result.response) {
-        const responseText = result.response.text();
-        console.log("Received response from Gemini API."); // Log success, maybe length
+      case 'anthropic':
+        try {
+          const anthropic = new Anthropic({ apiKey });
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+          
+          const msg = await anthropic.messages.create({
+            model: ANTHROPIC_MODEL, 
+            max_tokens: TOKEN_LIMITS.anthropic, 
+            temperature: 0.7,
+            system: "You are an expert technical writer generating Markdown project planning documents.",
+            messages: [{ role: "user", content: prompt }]
+          }, { signal: controller.signal });
+          
+          clearTimeout(timeoutId);
+          
+          if (msg.content?.[0]?.type === 'text') {
+            generatedText = msg.content[0].text;
+          } else {
+            throw new Error("Anthropic API returned unexpected/empty content");
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error('Anthropic API request timed out');
+          }
+          
+          let specificError = "";
+          if (err instanceof Anthropic.APIError) {
+            specificError = ` (Status: ${err.status}, Type: ${err.type})`;
+          }
+          
+          throw new Error(`Anthropic API request failed: ${err instanceof Error ? err.message : String(err)}${specificError}`);
+        }
+        break;
 
-        // --- TODO: Save Generated Content ---
-        // In a real application, you would parse `responseText` (which should be Markdown)
-        // and potentially split it into separate files or store it appropriately.
-        // For now, we just log it and send success.
+      default: 
+        return res.status(400).json({ 
+          error: 'Invalid AI provider specified', 
+          code: 'INVALID_PROVIDER' 
+        });
+    }
 
-        // Example: Save the entire response to a file (using Node.js fs for demonstration)
-        // import fs from 'fs/promises';
-        // import path from 'path';
-        // const outputDir = path.resolve(process.cwd(), 'generated_docs');
-        // await fs.mkdir(outputDir, { recursive: true });
-        // const outputFilePath = path.join(outputDir, `${projectDetails.projectName.replace(/[^a-zA-Z0-9]/g, '_')}_docs.md`);
-        // await fs.writeFile(outputFilePath, responseText);
-        // console.log(`Generated docs saved to: ${outputFilePath}`);
-        // ---
-
-        res.status(200).json({ message: 'Documentation generation successful! (Content logged on server)' });
+    if (generatedText) {
+      console.log(`Successfully generated content using ${provider}. Length: ${generatedText.length}`);
+      // Include the generated content in the response
+      return res.status(200).json({ 
+        message: `Successfully generated documentation using ${provider}!`,
+        content: generatedText
+      }); 
     } else {
-        // Handle cases where the response might be blocked or empty
-        console.error("Gemini API call completed but returned no content or was blocked.", result);
-         // Attempt to get blocking reason if available
-        const blockReason = result.response?.promptFeedback?.blockReason;
-        const safetyRatings = result.response?.candidates?.[0]?.safetyRatings;
-        let errorMessage = "Gemini API call failed or response was blocked.";
-        if(blockReason){
-            errorMessage += ` Reason: ${blockReason}.`;
-        }
-        if(safetyRatings){
-             errorMessage += ` Safety Ratings: ${JSON.stringify(safetyRatings)}`;
-        }
-        res.status(500).json({ error: errorMessage });
+      throw new Error("AI generation completed but produced no output text");
     }
 
   } catch (error) {
-    console.error("Error calling Gemini API or processing request:", error);
-    const message = error instanceof Error ? error.message : 'An unknown error occurred during generation.';
-    res.status(500).json({ error: `Documentation generation failed: ${message}` });
+    console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error);
+    
+    const message = error instanceof Error ? error.message : 'An unknown error occurred';
+    const errorCode = error instanceof Error && 'code' in error ? (error as any).code : 'INTERNAL_SERVER_ERROR';
+    
+    return res.status(500).json({ 
+      error: `Failed to generate documentation: ${message}`,
+      code: errorCode
+    });
   }
 }
