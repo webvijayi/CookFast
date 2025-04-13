@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
+const isGithubActions = process.env.GITHUB_ACTIONS === 'true';
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: 'export', // Enable static export
+  basePath: isGithubActions ? '/CookFast' : undefined, // Set basePath for GitHub Pages
+  images: {
+    unoptimized: true, // Disable image optimization for static export
+  },
   reactStrictMode: true,
   // Add this experimental block to allow the development server origin
   experimental: {
