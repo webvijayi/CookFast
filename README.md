@@ -1,54 +1,86 @@
-# 🚀 Awesome Tool Name (Please Update) 🛠️
+# 🚀 CookFast: AI-Powered Project Planning Documents 🛠️
 
-This project contains a tool built with Next.js. (Please provide a brief introduction here!)
+CookFast is a web application built with Next.js that helps you quickly generate preliminary project planning documents using various AI models. Provide your project details, select the documents you need, choose your preferred AI provider (Gemini, OpenAI, or Anthropic), enter your API key, and CookFast will generate the Markdown documentation for you.
 
 ## ✨ Features
 
-Based on the API routes, potential features include:
-
-*   **Document Generation:** Capability to generate documents via `/api/generate-docs`. (Describe what kind of documents and how it works).
-*   **Key Validation:** Includes an endpoint for validating keys at `/api/validate-key`. (Explain the purpose of key validation).
-*   **(Add other features of your tool here)**
+*   **Multiple AI Providers:** Choose between Google Gemini, OpenAI (GPT-4o), and Anthropic Claude 3 models.
+*   **Flexible Document Selection:** Select the specific planning documents you need, such as:
+    *   Project Requirements Document
+    *   Frontend Guidelines
+    *   Backend Structure Proposal
+    *   Application Flow Diagram (Mermaid)
+    *   Tech Stack Documentation
+    *   System Prompts (if applicable)
+    *   File Structure Proposal
+*   **Markdown Output:** Generates documents in Markdown format, suitable for easy integration into your project's documentation.
+*   **Mermaid Diagram Support:** Automatically suggests and includes Mermaid syntax for diagrams where appropriate (e.g., App Flow, Backend Structure).
+*   **API Key Validation:** Includes a client-side check to help validate the format and accessibility of your provided API key before generation.
+*   **Secure API Key Handling:** Your API keys are **never stored** by the application. They are sent directly to the chosen AI provider for the generation request only. The application is open-source for verification.
+*   **Rate Limiting:** Basic API rate limiting is implemented to prevent abuse.
+*   **Dark Mode:** Toggle between light and dark themes for comfortable viewing.
+*   **Built with Modern Tech:** Next.js, React, TypeScript, Tailwind CSS.
 
 ---
 
-## Getting Started (Default Next.js Info)
+## Getting Started
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+### Prerequisites
 
-First, run the development server:
+*   Node.js (Version 20 or later recommended)
+*   npm, yarn, or pnpm
+*   An API key for at least one of the supported AI providers (Gemini, OpenAI, Anthropic).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Installation & Running Locally
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/webvijayi/CookFast.git # Replace with your actual repo URL if different
+    cd CookFast
+    ```
 
-You can start editing the page by modifying `src/pages/index.tsx`. The page auto-updates as you edit the file.
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or
+    yarn install
+    # or
+    pnpm install
+    ```
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `src/pages/api/hello.ts`.
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
 
-The `src/pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+4.  Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### How to Use
 
-## Learn More
+1.  Select your preferred AI Provider (Gemini, OpenAI, or Anthropic).
+2.  Enter your corresponding API Key and optionally click "Test" to validate it.
+3.  Fill in the details about your project (Name, Type, Goal, Features, Tech Stack).
+4.  Select the checkboxes for the document types you want to generate.
+5.  Click "Cook Up Docs!".
+6.  The generated Markdown content will appear in the results area below the form.
 
-To learn more about Next.js, take a look at the following resources:
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to open an issue or submit a pull request on the [GitHub repository](https://github.com/webvijayi/CookFast). (Update link if necessary)
+
+---
+
+## Learn More (Default Next.js Info)
+
+To learn more about the underlying Next.js framework, take a look at the following resources:
 
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
+## Deploy on Vercel (Default Next.js Info)
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+Check out the [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
