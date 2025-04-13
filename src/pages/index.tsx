@@ -53,6 +53,8 @@ export default function CookFastHome() {
   const [results, setResults] = useState<string | null>(null); // Success message
   const [generatedMarkdown, setGeneratedMarkdown] = useState<string | null>(null); // State for generated content
   const [error, setError] = useState<string | null>(null); // For main generation errors
+  const [debugInfo, setDebugInfo] = useState<string | null>(null); // State for debug info
+  const [showDebug, setShowDebug] = useState(false); // State to toggle debug visibility
   const [darkMode, setDarkMode] = useState(false); // State for theme toggle
 
   // --- Theme Toggle Effect ---
@@ -144,8 +146,8 @@ export default function CookFastHome() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Reset messages
-    setResults(null); setError(null); setGeneratedMarkdown(null); // Reset generated content too
+    // Reset messages and debug info
+    setResults(null); setError(null); setGeneratedMarkdown(null); setDebugInfo(null); setShowDebug(false);
     // Validation
     if (!userApiKey.trim()) { setError(`API Key for ${selectedProvider.toUpperCase()} is required.`); return; }
     if (!projectDetails.projectName.trim()) { setError(`Project Name is required.`); return; }
@@ -154,16 +156,48 @@ export default function CookFastHome() {
     // if (keyValidationStatus !== 'valid') { setError("Please validate your API key before generating documents."); return; }
 
     setIsLoading(true);
+    let generatedPrompt = ''; // Variable to store the prompt
     try {
+      // Build the prompt locally first to display for debugging
+      // NOTE: This duplicates the logic from the API route's buildPrompt function.
+      // Ideally, this logic would be shared, but for simplicity here, we recreate it.
+      // Or, the API could return the prompt it used in its response.
+      const selectedDocList = Object.entries(selectedDocs)
+        .filter(([, value]) => value)
+        .map(([key]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}`)
+        .join('\n');
+      generatedPrompt = `Project Name: ${projectDetails.projectName}\nType: ${projectDetails.projectType}\nGoal: ${projectDetails.projectGoal}\nFeatures: ${projectDetails.features}\nTech Stack: ${projectDetails.techStack}\n\nRequested Docs:\n${selectedDocList}`;
+      setDebugInfo(`--- PROMPT SENT (Simplified) ---\n${generatedPrompt}\n\n--- API RESPONSE ---`); // Set initial debug info
+
       const response = await fetch('/api/generate-docs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectDetails, selectedDocs, provider: selectedProvider, apiKey: userApiKey }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Request failed: ${response.status}`);
+      
+      // Try to parse JSON regardless of status, as API might return error details in JSON
+      let data;
+      try {
+          data = await response.json();
+      } catch (jsonError) {
+          // If JSON parsing fails, throw an error with the status text
+          throw new Error(`Request failed: ${response.status} ${response.statusText}. Response not valid JSON.`);
+      }
+
+      if (!response.ok) {
+        // Throw error using the parsed JSON error message if available
+        throw new Error(data.error || `Request failed: ${response.status} ${response.statusText}`);
+      }
+      
       setResults(data.message); // Show backend success message
       setGeneratedMarkdown(data.content); // Store the generated markdown
-       setKeyValidationStatus('idle'); // Reset validation status after successful generation
+      setDebugInfo(prev => `${prev}\nStatus: ${response.status}\nSuccess: ${data.message}`);
+      setKeyValidationStatus('idle'); // Reset validation status after successful generation
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally { setIsLoading(false); }
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(errorMessage);
+      setDebugInfo(prev => `${prev}\nERROR: ${errorMessage}`); // Append error to debug info
+    } finally {
+      setIsLoading(true); // Keep loading indicator until debug info is potentially shown
+      setShowDebug(true); // Show debug info regardless of success/failure
+      setIsLoading(false); // Turn off loading indicator *after* setting showDebug
+    }
   };
 
   const formatLabel = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).replace(/ Doc$/, ' Document').trim();
@@ -351,6 +385,21 @@ export default function CookFastHome() {
               </div>
             )}
           </div>
+
+          {/* Debug Info Area */}
+          {showDebug && debugInfo && (
+            <div className="mt-6 p-4 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-inner">
+              <h4 
+                className="font-semibold text-sm mb-2 cursor-pointer text-gray-700 dark:text-gray-300" 
+                onClick={() => document.getElementById('debug-content')?.classList.toggle('hidden')}
+              >
+                Debug Information (Click to toggle)
+              </h4>
+              <pre id="debug-content" className="mt-2 p-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words overflow-auto max-h-60 hidden">
+                <code>{debugInfo}</code>
+              </pre>
+            </div>
+          )}
 
         </div>
       </main>

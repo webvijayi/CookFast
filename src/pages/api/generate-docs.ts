@@ -239,7 +239,16 @@ export default async function handler(
           if (err instanceof Error && err.name === 'AbortError') {
             throw new Error('Gemini API request timed out');
           }
-          throw new Error(`Gemini API request failed: ${err instanceof Error ? err.message : String(err)}`); 
+          // Check if the error message indicates a quota/rate limit issue (common cause of 429)
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          if (errorMessage.includes('429') || /quota|rate limit/i.test(errorMessage)) {
+             console.error(`Gemini API quota/rate limit error: ${errorMessage}`); // Log specific error server-side
+             // Return a 429 status code to the client
+             res.status(429).json({ error: `Gemini API Error: Rate limit or quota exceeded. Please check your Gemini plan/usage. (${errorMessage.substring(0, 100)}...)`, code: 'GEMINI_QUOTA_EXCEEDED' });
+             return; // Stop execution after sending response
+          }
+          // Throw other errors to be caught by the main handler
+          throw new Error(`Gemini API request failed: ${errorMessage}`);
         }
         break;
 
