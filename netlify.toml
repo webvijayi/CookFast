@@ -1,0 +1,24 @@
+# Netlify build configuration for a Next.js project
+
+[build]
+  # Command to build the Next.js application
+  command = "npm run build"
+  
+  # Directory containing the built assets (usually .next)
+  # Netlify's Next.js runtime automatically handles the correct publish directory.
+  # Explicitly setting 'publish' might interfere with the runtime.
+  # If issues arise, you might try setting publish = ".next", but start without it.
+  
+  # Directory containing serverless functions (API routes)
+  # Netlify's Next.js runtime automatically detects functions in pages/api.
+  # functions = "netlify/functions" # Typically not needed for Next.js API routes
+
+[dev]
+  # Optional: Settings for local development using Netlify Dev CLI
+  # command = "npm run dev" # Command to start your dev server
+  # port = 3000             # Port your dev server runs on
+  # publish = ".next"       # Dev server build directory (if applicable)
+
+# Plugin for essential Next.js features on Netlify
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
