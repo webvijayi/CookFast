@@ -43,7 +43,7 @@ const GenerateIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" className="
 
 export default function CookFastHome() {
   // Debug logging state
-  const [debugLogs, setDebugLogs] = useState<Array<{timestamp: string, event: string, details: any}>>([]);
+  const [debugLogs, setDebugLogs] = useState<Array<{timestamp: string, event: string, details: unknown}>>([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [generationStage, setGenerationStage] = useState<string>('');
   const [documentSections, setDocumentSections] = useState<Array<{title: string, content: string}>>([]);
@@ -78,7 +78,7 @@ export default function CookFastHome() {
   // --- State Variables ---
   
   // Function to add debug logs with timestamp
-  const addDebugLog = (event: string, details: any = {}) => {
+  const addDebugLog = (event: string, details: unknown = {}) => {
     const timestamp = new Date().toISOString();
     setDebugLogs(prevLogs => [...prevLogs, { timestamp, event, details }]);
   };
@@ -93,8 +93,8 @@ export default function CookFastHome() {
   const [results, setResults] = useState<string | null>(null); // Success message
   const [generatedMarkdown, setGeneratedMarkdown] = useState<string | null>(null); // State for generated content
   const [error, setError] = useState<string | null>(null); // For main generation errors
-  const [debugInfo, setDebugInfo] = useState<string | null>(null); // State for debug info
-  const [showDebug, setShowDebug] = useState(false); // State to toggle debug visibility
+  const [debugInfo] = useState<string | null>(null); // State for debug info
+  const [showDebug] = useState(false); // State to toggle debug visibility
   // Theme toggle is now handled by ThemeContext
 
   // Theme toggle is now handled by ThemeContext
@@ -195,14 +195,14 @@ export default function CookFastHome() {
       setGenerationStage(`Generating documents with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}...`);
       
       // Function to update status during generation
-      let statusUpdateInterval = setInterval(() => {
+      const statusUpdateInterval = setInterval(() => {
         // Rotate through status messages to show progress
         setGenerationStage(prevStage => {
           const stages = [
             `Processing project details with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`,
             `Creating documentation structure`,
             `Generating comprehensive documentation`,
-            `Finalizing ${Object.entries(selectedDocs).filter(([_, value]) => value).length} document sections`,
+            `Finalizing ${Object.entries(selectedDocs).filter(([, value]) => value).length} document sections`,
             `Applying markdown formatting`
           ];
           
@@ -514,8 +514,9 @@ const copyToClipboard = (content: string) => {
                 {/* Document actions */}
                 <div className="flex flex-wrap gap-3 mb-4">
                   <button
-                    onClick={() => downloadContent(generatedMarkdown, `${projectDetails.projectName.replace(/\s+/g, '-')}-documentation.md`)}
+                    onClick={() => generatedMarkdown && downloadContent(generatedMarkdown, `${projectDetails.projectName.replace(/\s+/g, '-')}-documentation.md`)}
                     className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors"
+                    disabled={!generatedMarkdown}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -524,8 +525,9 @@ const copyToClipboard = (content: string) => {
                   </button>
                   
                   <button
-                    onClick={() => copyToClipboard(generatedMarkdown)}
+                    onClick={() => generatedMarkdown && copyToClipboard(generatedMarkdown)}
                     className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                    disabled={!generatedMarkdown}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
