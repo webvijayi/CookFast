@@ -1,25 +1,98 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* Dark mode variables */
 :root {
   --background: #ffffff;
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-/* Define dark mode variables when the 'dark' class is present on the html element */
 html.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #0f172a;
+  --foreground: #f8fafc;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Theme toggle button styling */
+.theme-toggle {
+  position: fixed;
+  z-index: 999; /* Increased z-index to ensure it's above all other elements */
+  padding: 0.75rem;
+  border-radius: 9999px;
+  bottom: 6rem; /* Moved higher up from the bottom for better visibility */
+  right: 1.5rem;
+  background-color: white;
+  color: #0f172a;
+  border: 2px solid #4338ca; /* Indigo border for better visibility */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  width: 3.5rem; /* Increased size */
+  height: 3.5rem; /* Increased size */
+}
+
+.dark .theme-toggle {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #818cf8; /* Lighter indigo for dark mode */
+}
+
+.theme-toggle:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.06);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 768px) {
+  .theme-toggle {
+    top: 1rem;
+    right: 1rem;
+    bottom: auto;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-width: 1px;
+  }
+}
+
+/* Add spacing for logo on mobile */
+.app-header {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+  position: relative;
+}
+
+/* Additional global styles to match the live site */
+.bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
+}
+
+.from-gray-100 {
+  --tw-gradient-from: #f3f4f6;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(243, 244, 246, 0));
+}
+
+.to-blue-100 {
+  --tw-gradient-to: #dbeafe;
+}
+
+.dark .dark\:from-slate-900 {
+  --tw-gradient-from: #0f172a;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(15, 23, 42, 0));
+}
+
+.dark .dark\:to-slate-800 {
+  --tw-gradient-to: #1e293b;
 }

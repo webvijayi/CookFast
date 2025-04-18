@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'; // Added useEffect
+import { useState } from 'react';
+import Head from 'next/head';
 
 // Define types for form data and document selection
 interface ProjectDetails {
@@ -41,7 +42,45 @@ const GenerateIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" className="
 
 
 export default function CookFastHome() {
+  // Debug logging state
+  const [debugLogs, setDebugLogs] = useState<Array<{timestamp: string, event: string, details: any}>>([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [generationStage, setGenerationStage] = useState<string>('');
+  <Head>
+    <title>CookFast | AI Documentation Generator</title>
+    <meta name="description" content="CookFast uses AI to auto-generate project documentation, templates, and guides. Supports OpenAI, Anthropic, and Gemini." />
+    <meta name="keywords" content="AI, documentation, templates, project generator, CookFast" />
+    <meta name="author" content="Web Vijayi" />
+    <meta property="og:title" content="CookFast | AI Documentation Generator" />
+    <meta property="og:description" content="Generate project docs, templates, and guides with AI. Supports multiple AI providers." />
+    <meta property="og:image" content="https://cook-fast.netlify.app/og-image.png" />
+    <meta property="og:url" content="https://cook-fast.netlify.app/" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@webvijayi" />
+    <meta name="twitter:creator" content="@webvijayi" />
+    <script type="application/ld+json">
+      {`{
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "CookFast",
+        "url": "https://cook-fast.netlify.app/",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://cook-fast.netlify.app/?search={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }`}
+    </script>
+  </Head>
+
   // --- State Variables ---
+  
+  // Function to add debug logs with timestamp
+  const addDebugLog = (event: string, details: any = {}) => {
+    const timestamp = new Date().toISOString();
+    setDebugLogs(prevLogs => [...prevLogs, { timestamp, event, details }]);
+  };
   const [projectDetails, setProjectDetails] = useState<ProjectDetails>({ projectName: '', projectType: 'Web Application', projectGoal: '', features: '', techStack: '' });
   const [selectedDocs, setSelectedDocs] = useState<DocumentSelection>({ requirements: true, frontendGuidelines: true, backendStructure: true, appFlow: true, techStackDoc: true, systemPrompts: true, fileStructure: true });
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini');
@@ -55,148 +94,158 @@ export default function CookFastHome() {
   const [error, setError] = useState<string | null>(null); // For main generation errors
   const [debugInfo, setDebugInfo] = useState<string | null>(null); // State for debug info
   const [showDebug, setShowDebug] = useState(false); // State to toggle debug visibility
-  const [darkMode, setDarkMode] = useState(false); // State for theme toggle
+  // Theme toggle is now handled by ThemeContext
 
-  // --- Theme Toggle Effect ---
-   useEffect(() => {
-    // Restore initial system preference check
-    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(prefersDark);
-
-     // Keep listener commented out for now to isolate button click
-     // const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-     // const handleChange = () => setDarkMode(mediaQuery.matches);
-     // mediaQuery.addEventListener('change', handleChange);
-     // return () => mediaQuery.removeEventListener('change', handleChange);
-     return () => {}; // Return empty cleanup function
-  }, []); // Runs only once on mount
-
-   useEffect(() => {
-    // Apply class to HTML element
-    console.log(`Dark mode effect running. darkMode state: ${darkMode}`); // DEBUG LOG
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      console.log('Added dark class to html'); // DEBUG LOG
-    } else {
-      document.documentElement.classList.remove('dark');
-      console.log('Removed dark class from html'); // DEBUG LOG
-    }
-  }, [darkMode]);
-
-  const toggleDarkMode = () => {
-    console.log('toggleDarkMode function called'); // DEBUG LOG
-    setDarkMode(prevMode => {
-      console.log(`Setting darkMode state from ${prevMode} to ${!prevMode}`); // DEBUG LOG
-      return !prevMode;
-    });
-  }
-  // --- End Theme Toggle ---
+  // Theme toggle is now handled by ThemeContext
 
 
   // --- Handlers ---
-  const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setProjectDetails(prev => ({ ...prev, [e.target.name]: e.target.value })); };
-  const handleDocSelectionChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSelectedDocs(prev => ({ ...prev, [e.target.name]: e.target.checked })); };
+  const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setProjectDetails(prev => ({ ...prev, [e.target.name]: e.target.value })); addDebugLog('Project Details Changed', { [e.target.name]: e.target.value }); };
+  const handleDocSelectionChange = (e: React.ChangeEvent<HTMLInputElement>) => { setSelectedDocs(prev => ({ ...prev, [e.target.name]: e.target.checked })); addDebugLog('Document Selection Changed', { [e.target.name]: e.target.checked }); };
   const handleProviderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSelectedProvider(e.target.value as AIProvider);
+    const newProvider = e.target.value as AIProvider;
+    setSelectedProvider(newProvider);
     setKeyValidationStatus('idle'); setKeyValidationError(null); setUserApiKey(''); // Clear key on provider change
+    addDebugLog('Provider Changed', { provider: newProvider });
   };
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setUserApiKey(e.target.value);
+    const newApiKey = e.target.value;
+    setUserApiKey(newApiKey);
     setKeyValidationStatus('idle'); setKeyValidationError(null); // Reset validation if key changes
+    addDebugLog('API Key Changed', { provider: selectedProvider, keyLength: newApiKey.length });
   };
 
   const handleValidateKey = async () => {
-    if (!userApiKey.trim()) { setKeyValidationError("API key cannot be empty."); setKeyValidationStatus('invalid'); return; }
+    if (!userApiKey.trim()) { setKeyValidationError("API key cannot be empty."); setKeyValidationStatus('invalid'); addDebugLog('Validation Failed', { reason: 'Empty API key' }); return; }
     setIsValidatingKey(true); setKeyValidationStatus('idle'); setKeyValidationError(null); setError(null); setResults(null); // Clear other messages
+    addDebugLog('Validation Started', { provider: selectedProvider, keyLength: userApiKey.length });
 
     try {
-       const response = await fetch('/api/validate-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: selectedProvider, apiKey: userApiKey }) });
+      addDebugLog('Sending Validation Request', { provider: selectedProvider, endpoint: '/api/validate-key' });
+      const response = await fetch('/api/validate-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: selectedProvider, apiKey: userApiKey }) });
 
-       // Check if the response status indicates success
-       if (response.ok) {
-         const data = await response.json(); // Attempt to parse JSON only if response is ok
-         if (data.valid) {
-           setKeyValidationStatus('valid');
-         } else {
-           // Handle cases where response is ok but validation failed (e.g., API returned { valid: false, error: ... })
-           setKeyValidationStatus('invalid');
-           setKeyValidationError(data.error || "Validation failed per API response.");
-         }
-       } else {
-         // Handle non-ok responses (e.g., 400, 401, 500 errors)
-         // Try to get error text, but don't assume JSON
-         const errorText = await response.text(); // Get raw text response
-         setKeyValidationStatus('invalid');
-         // Try to parse JSON from error text, otherwise use the raw text
-         try {
-            const errorJson = JSON.parse(errorText);
-            setKeyValidationError(errorJson.error || `API Error: ${response.status} ${response.statusText}`);
-         } catch {
-            setKeyValidationError(`API Error: ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 100)}`); // Show snippet of non-JSON error
-         }
-       }
-    } catch (err) {
-        // Catch network errors or issues with the fetch itself
+      addDebugLog('Validation Response Received', { status: response.status });
+      const data = await response.json();
+
+      if (response.ok && data.valid) {
+        setKeyValidationStatus('valid');
+        setKeyValidationError('');
+        addDebugLog('Validation Successful', { provider: selectedProvider });
+      } else {
         setKeyValidationStatus('invalid');
-        setKeyValidationError(err instanceof Error ? err.message : "Network error or issue during validation request.");
+        setKeyValidationError(data.error || "Validation failed per API response.");
+        addDebugLog('Validation Failed', { error: data.error });
+      }
+    } catch (err) {
+      setKeyValidationStatus('invalid');
+      setKeyValidationError(err instanceof Error ? err.message : "Network error or issue during validation request.");
+      addDebugLog('Validation Error', { error: err instanceof Error ? err.message : String(err) });
     } finally {
-        setIsValidatingKey(false);
+      setIsValidatingKey(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Reset messages and debug info
-    setResults(null); setError(null); setGeneratedMarkdown(null); setDebugInfo(null); setShowDebug(false);
-    // Validation
-    if (!userApiKey.trim()) { setError(`API Key for ${selectedProvider.toUpperCase()} is required.`); return; }
-    if (!projectDetails.projectName.trim()) { setError(`Project Name is required.`); return; }
-    if (!Object.values(selectedDocs).some(isSelected => isSelected)) { setError(`Please select at least one document type.`); return; }
-    // Optional: Require successful validation before submitting
-    // if (keyValidationStatus !== 'valid') { setError("Please validate your API key before generating documents."); return; }
+    addDebugLog('Generation Started', { projectDetails, selectedDocs, provider: selectedProvider });
+    
+    // Check if at least one document is selected
+    const hasSelectedDoc = Object.values(selectedDocs).some(value => value);
+    if (!hasSelectedDoc) {
+      setError('Please select at least one document type to generate.');
+      addDebugLog('Generation Failed', { reason: 'No documents selected' });
+      return;
+    }
+
+    // Validate required fields
+    if (!projectDetails.projectName || !projectDetails.projectGoal) {
+      setError('Project Name and Project Goal are required fields.');
+      addDebugLog('Generation Failed', { reason: 'Missing required fields', missingFields: { name: !projectDetails.projectName, goal: !projectDetails.projectGoal } });
+      return;
+    }
+
+    if (!userApiKey.trim()) {
+      setError('API key is required.');
+      addDebugLog('Generation Failed', { reason: 'API key not provided' });
+      return;
+    }
 
     setIsLoading(true);
-    let generatedPrompt = ''; // Variable to store the prompt
+    setError('');
+    setResults('');
+    setGeneratedMarkdown('');
+    
+    // Set initial generation stage
+    setGenerationStage('Preparing request');
+    
     try {
-      // Build the prompt locally first to display for debugging
-      // NOTE: This duplicates the logic from the API route's buildPrompt function.
-      // Ideally, this logic would be shared, but for simplicity here, we recreate it.
-      // Or, the API could return the prompt it used in its response.
-      const selectedDocList = Object.entries(selectedDocs)
-        .filter(([, value]) => value)
-        .map(([key]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}`)
-        .join('\n');
-      generatedPrompt = `Project Name: ${projectDetails.projectName}\nType: ${projectDetails.projectType}\nGoal: ${projectDetails.projectGoal}\nFeatures: ${projectDetails.features}\nTech Stack: ${projectDetails.techStack}\n\nRequested Docs:\n${selectedDocList}`;
-      setDebugInfo(`--- PROMPT SENT (Simplified) ---\n${generatedPrompt}\n\n--- API RESPONSE ---`); // Set initial debug info
-
-      const response = await fetch('/api/generate-docs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectDetails, selectedDocs, provider: selectedProvider, apiKey: userApiKey }) });
+      // Update status for better user feedback
+      setGenerationStage('Constructing prompt');
+      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI update
       
-      // Try to parse JSON regardless of status, as API might return error details in JSON
-      let data;
-      try {
-          data = await response.json();
-      } catch (jsonError) {
-          // If JSON parsing fails, throw an error with the status text
-          throw new Error(`Request failed: ${response.status} ${response.statusText}. Response not valid JSON.`);
-      }
-
-      if (!response.ok) {
-        // Throw error using the parsed JSON error message if available
-        throw new Error(data.error || `Request failed: ${response.status} ${response.statusText}`);
-      }
+      addDebugLog('Sending Generation Request', { provider: selectedProvider, endpoint: '/api/generate-docs' });
       
-      setResults(data.message); // Show backend success message
-      setGeneratedMarkdown(data.content); // Store the generated markdown
-      setDebugInfo(prev => `${prev}\nStatus: ${response.status}\nSuccess: ${data.message}`);
-      setKeyValidationStatus('idle'); // Reset validation status after successful generation
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMessage);
-      setDebugInfo(prev => `${prev}\nERROR: ${errorMessage}`); // Append error to debug info
+      setGenerationStage(`Sending request to ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)} API`);
+      await new Promise(resolve => setTimeout(resolve, 800)); // Small delay for UI update
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 600000); // Match the 10-minute timeout
+      
+      setGenerationStage(`Generating documents with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}...`);
+      
+      // Function to update status during generation
+      let statusUpdateInterval = setInterval(() => {
+        // Rotate through status messages to show progress
+        setGenerationStage(prevStage => {
+          const stages = [
+            `Processing project details with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`,
+            `Creating documentation structure`,
+            `Generating comprehensive documentation`,
+            `Finalizing ${Object.entries(selectedDocs).filter(([_, value]) => value).length} document sections`,
+            `Applying markdown formatting`
+          ];
+          
+          const currentIndex = stages.indexOf(prevStage);
+          if (currentIndex === -1 || currentIndex === stages.length - 1) {
+            return stages[0];
+          } else {
+            return stages[currentIndex + 1];
+          }
+        });
+      }, 5000); // Update every 5 seconds
+      
+      const response = await fetch('/api/generate-docs', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ projectDetails, selectedDocs, provider: selectedProvider, apiKey: userApiKey }),
+        signal: controller.signal
+      });
+      
+      // Clear the status update interval
+      clearInterval(statusUpdateInterval);
+      clearTimeout(timeoutId);
+
+      setGenerationStage('Processing response');
+      addDebugLog('Generation Response Received', { status: response.status });
+      const data = await response.json();
+
+      if (response.ok) {
+        setGenerationStage('Generation complete!');
+        setResults(data.message);
+        setGeneratedMarkdown(data.content);
+        addDebugLog('Generation Successful', { messageLength: data.message.length, contentLength: data.content.length });
+      } else {
+        setGenerationStage('Generation failed');
+        setError(data.error || 'Failed to generate documentation. Please try again.');
+        addDebugLog('Generation Failed', { error: data.error, code: data.code });
+      }
+    } catch (error) {
+      console.error('Error generating documentation:', error);
+      setGenerationStage('Connection error');
+      setError('Error connecting to generation service. Please try again.');
+      addDebugLog('Generation Error', { error: error instanceof Error ? error.message : String(error) });
     } finally {
-      setIsLoading(true); // Keep loading indicator until debug info is potentially shown
-      setShowDebug(true); // Show debug info regardless of success/failure
-      setIsLoading(false); // Turn off loading indicator *after* setting showDebug
+      setIsLoading(false);
     }
   };
 
@@ -208,17 +257,10 @@ export default function CookFastHome() {
     // Removed conditional 'dark' class here; it should rely on the class on <html>
     <div className={`flex flex-col min-h-screen font-sans transition-colors duration-300 bg-gradient-to-br from-gray-100 to-blue-100 dark:from-slate-900 dark:to-slate-800 text-gray-900 dark:text-gray-200`}>
 
-      {/* Floating Theme Toggle Button */}
-        <button
-           onClick={toggleDarkMode}
-           className="fixed top-4 right-4 z-50 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-           aria-label="Toggle Dark Mode"
-        >
-           {darkMode ? /* Moon Icon */ <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg> : /* Sun Icon */ <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 14.464A1 1 0 106.465 13.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm-.707-7.072l.707-.707A1 1 0 003.634 5.05l-.707.707a1 1 0 001.414 1.414zM3 11a1 1 0 100-2H2a1 1 0 100 2h1z" clipRule="evenodd" /></svg>}
-        </button>
+      {/* Theme toggle is now handled by the ThemeToggle component in _app.tsx */}
 
       {/* Header */}
-      <header className="pt-8 pb-6 text-center">
+      <header className="pt-8 pb-6 text-center app-header">
          {/* Emojis as separate element before H1 for reliable rendering */}
          <div className="text-5xl mb-2 flex justify-center items-center"> {/* Container for alignment */}
            <span className="mr-3">🍳🚀</span> {/* Emojis */}
@@ -247,7 +289,7 @@ export default function CookFastHome() {
                        {/* Corrected: Added commas and type assertion */}
                       {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map((provider) => (
                           <div key={provider} className="flex items-center">
-                             <input id={`provider-${provider}`} name="provider" type="radio" value={provider} checked={selectedProvider === provider} onChange={handleProviderChange} className="focus:ring-indigo-500 dark:focus:ring-indigo-400 h-4 w-4 text-indigo-600 dark:text-indigo-500 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700"/>
+                             <input id={`provider-${provider}`} name="provider" type="radio" value={provider} checked={selectedProvider === provider} onChange={handleProviderChange} className="focus:ring-indigo-500 dark:focus:ring-indigo-400 h-4 w-4 text-indigo-600 dark:text-indigo-500 border-gray-300 dark:border-slate-500 bg-white dark:bg-slate-700"/>
                              <label htmlFor={`provider-${provider}`} className="ml-2 block text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{provider}</label>
                           </div>
                       ))}
@@ -359,13 +401,18 @@ export default function CookFastHome() {
                     : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 dark:from-blue-500 dark:via-indigo-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:via-indigo-600 dark:hover:to-purple-600 transform hover:scale-105'
                  }`}
               >
-                 {isLoading ? <><SpinnerIcon /> Generating...</> : <><GenerateIcon /> Cook Up Docs!</>}
+                 {isLoading ? <>
+                    <SpinnerIcon /> 
+                    <span className="ml-1">{generationStage || 'Generating...'}</span>
+                  </> : <><GenerateIcon /> Cook Up Docs!</>}
               </button>
             </div>
           </form>
 
+
+
           {/* Results/Error Display Area */}
-          <div className="mt-12 space-y-4"> {/* Add space */}
+          <div className="mt-8 space-y-4">
              {results && (
               <div className="p-5 bg-green-100 dark:bg-green-900/50 border border-green-300 dark:border-green-700/50 rounded-lg shadow text-green-800 dark:text-green-200">
                 <h3 className="font-semibold text-lg mb-2">Generation Successful!</h3>
@@ -385,21 +432,84 @@ export default function CookFastHome() {
               </div>
             )}
           </div>
-
-          {/* Debug Info Area */}
-          {showDebug && debugInfo && (
-            <div className="mt-6 p-4 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-inner">
-              <h4 
-                className="font-semibold text-sm mb-2 cursor-pointer text-gray-700 dark:text-gray-300" 
-                onClick={() => document.getElementById('debug-content')?.classList.toggle('hidden')}
+          
+          {/* Debug Button & Panel */}
+          <div className="mt-6">
+            <div className="flex justify-center mb-4">
+              <button 
+                onClick={() => setShowDebugPanel(!showDebugPanel)} 
+                className="text-xs px-4 py-2 rounded-md bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors flex items-center"
               >
-                Debug Information (Click to toggle)
-              </h4>
-              <pre id="debug-content" className="mt-2 p-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words overflow-auto max-h-60 hidden">
-                <code>{debugInfo}</code>
-              </pre>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {showDebugPanel ? 'Hide Debug Panel' : 'Show Debug Panel'}
+              </button>
             </div>
-          )}
+            
+            {/* Debug Info Area */}
+            {showDebug && debugInfo && (
+              <div className="mt-4 p-4 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-inner">
+                <h4 
+                  className="font-semibold text-sm mb-2 cursor-pointer text-gray-700 dark:text-gray-300" 
+                  onClick={() => document.getElementById('debug-content')?.classList.toggle('hidden')}
+                >
+                  Debug Information (Click to toggle)
+                </h4>
+                <pre id="debug-content" className="mt-2 p-3 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words overflow-auto max-h-60 hidden">
+                  <code>{debugInfo}</code>
+                </pre>
+              </div>
+            )}
+            
+            {/* Debug Logs Panel */}
+            {showDebugPanel && (
+              <div className="mt-4 mx-auto p-4 bg-gray-100 dark:bg-slate-800 rounded-lg shadow text-left overflow-hidden text-xs">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-semibold">Debug Logs</h3>
+                  <button 
+                    onClick={() => setDebugLogs([])} 
+                    className="text-xs px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-800/30"
+                  >
+                    Clear Logs
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {debugLogs.length === 0 ? (
+                    <p className="text-gray-500 dark:text-gray-400 italic">No logs yet. Actions will be recorded here.</p>
+                  ) : (
+                    <table className="w-full border-collapse text-left">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-700">
+                          <th className="py-2 pr-2 w-1/4">Timestamp</th>
+                          <th className="py-2 pr-2 w-1/4">Event</th>
+                          <th className="py-2 w-1/2">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {debugLogs.map((log, idx) => (
+                          <tr key={idx} className="border-b border-gray-200 dark:border-gray-700">
+                            <td className="py-2 pr-2 font-mono text-gray-600 dark:text-gray-400">
+                              {new Date(log.timestamp).toLocaleTimeString()}
+                            </td>
+                            <td className="py-2 pr-2 font-medium">
+                              {log.event}
+                            </td>
+                            <td className="py-2 break-all">
+                              {typeof log.details === 'object' 
+                                ? JSON.stringify(log.details, null, 2)
+                                : String(log.details)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
         </div>
       </main>
@@ -423,7 +533,10 @@ export default function CookFastHome() {
              <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                 Report Issue / Contribute
              </a>
+
          </div>
+         
+
       </footer>
     </div>
   );

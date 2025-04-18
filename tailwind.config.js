@@ -1,18 +1,29 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  // Configure dark mode to use the 'dark' class on the html element
   darkMode: 'class',
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}", // If you have a components directory
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}", // If using App Router (though you seem to use Pages)
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/contexts/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
-      // You can extend your theme here if needed
+      colors: {
+        primary: {
+          '50': '#f5f7ff',
+          '100': '#ebf0fe',
+          '200': '#dbe3fe',
+          '300': '#bfccfb',
+          '400': '#9eaff8',
+          '500': '#7a8ff4',
+          '600': '#5d6eec',
+          '700': '#4957db',
+          '800': '#3a44b1',
+          '900': '#323d8f',
+        },
+      },
     },
   },
-  plugins: [
-    // Add any Tailwind plugins here
-  ],
+  plugins: [],
 }

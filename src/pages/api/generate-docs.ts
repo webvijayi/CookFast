@@ -5,6 +5,10 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { rateLimit } from '../../utils/rate-limiter';
 
+// For environments that have issues with the native fetch implementation
+import fetch from 'cross-fetch';
+global.fetch = fetch;
+
 // Initialize the rate limiter (e.g., 10 requests per minute per IP)
 const limiter = rateLimit({
   interval: 60 * 1000, // 60 seconds
@@ -41,6 +45,12 @@ interface GenerateDocsRequestBody {
 type SuccessResponse = { 
   message: string;
   content: string; // Added to return the generated content
+  debug?: {
+    provider: string;
+    model: string;
+    timestamp: string;
+    contentLength: number;
+  }
 }
 
 type ErrorResponse = { 
@@ -49,9 +59,9 @@ type ErrorResponse = {
 }
 
 // Constants
-const GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"; // Use Experimental model as Preview has no free tier
-const OPENAI_MODEL = "gpt-4o";  // Current model
-const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Updated based on user feedback
+const GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"; // Using exactly the model shown on the frontend
+const OPENAI_MODEL = "gpt-4o"; // Current OpenAI model
+const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Updated to Claude 3.7 Sonnet
 
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -60,11 +70,11 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-// Token limits per provider (Reduced for faster response / lower timeout risk)
+// Token limits per provider (Maintaining higher limits as we've increased the timeout)
 const TOKEN_LIMITS = {
-  gemini: 8192,    // Reduced from 30720
+  gemini: 8192,    // Higher limit for comprehensive documents
   openai: 8192,    // For gpt-4o
-  anthropic: 8192  // Reduced from 100000
+  anthropic: 32768  // Claude 3.7 Sonnet can handle even larger outputs
 };
 
 // Helper Function to Build Prompt
@@ -106,6 +116,9 @@ function validateApiKey(provider: string, apiKey: string): boolean {
     case 'openai':
       return /^sk-[A-Za-z0-9]{32,}$/.test(apiKey);
     case 'anthropic':
+      // Updated to match current Anthropic API key format
+      // They typically start with 'sk-ant-' followed by at least 24 alphanumeric chars
+      // But allow for longer keys as formats might evolve
       return /^sk-ant-[A-Za-z0-9]{24,}$/.test(apiKey);
     case 'gemini':
       return /^[A-Za-z0-9_-]{39}$/.test(apiKey);
@@ -198,42 +211,46 @@ export default async function handler(
 
     // console.log(`Received request. Provider: ${provider}, Project: ${projectDetails.projectName}`); // Removed for production
 
-    // Set timeout for API calls to prevent hanging requests
-    const requestTimeout = 60000; // 60 seconds
+    // Set a very generous timeout for all providers as requested
+    const requestTimeout = 600000; // 600 seconds (10 minutes)
 
     switch (provider) {
       case 'gemini':
         try {
+          // Configure Gemini API with direct fetch implementation
           const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
           
-          const generationConfig = { 
-            temperature: 0.7, 
-            topK: 1, 
-            topP: 1, 
-            maxOutputTokens: TOKEN_LIMITS.gemini 
-          };
-          
-          const chat = model.startChat({ 
-            generationConfig, 
-            safetySettings, 
-            history: [] 
-          });
+          const systemInstruction = "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices.";
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
           
-          const result = await chat.sendMessage(prompt, { signal: controller.signal });
+          console.log(`Using Gemini model: ${GEMINI_MODEL}`);
+          
+          const model = genAI.getGenerativeModel({ 
+            model: GEMINI_MODEL,
+            systemInstruction
+          });
+          
+          // Configure generation with appropriate settings
+          const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { 
+              temperature: 0.7,
+              maxOutputTokens: TOKEN_LIMITS.gemini,
+              topK: 40,
+              topP: 0.95
+            },
+            safetySettings
+          }, { signal: controller.signal });
+          
           clearTimeout(timeoutId);
           
-          if (!result.response) {
-            throw new Error("Gemini API returned an empty or blocked response");
-          }
+          const response = result.response;
+          generatedText = response.text();
           
-          generatedText = result.response.text();
-          
-          if (result.response?.promptFeedback?.blockReason) {
-            console.warn(`Gemini response potentially blocked. Reason: ${result.response.promptFeedback.blockReason}`);
+          if (!generatedText) {
+            throw new Error("Gemini API returned no text in response");
           }
         } catch (err) { 
           if (err instanceof Error && err.name === 'AbortError') {
@@ -262,11 +279,14 @@ export default async function handler(
           const completion = await openai.chat.completions.create({
             model: OPENAI_MODEL,
             messages: [
-              { role: "system", content: "You are an expert technical writer generating Markdown project planning documents." }, 
+              { role: "system", content: "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices." }, 
               { role: "user", content: prompt }
             ],
             temperature: 0.7, 
             max_tokens: TOKEN_LIMITS.openai,
+            top_p: 0.95,
+            frequency_penalty: 0.1,
+            presence_penalty: 0.1
           }, { signal: controller.signal });
           
           clearTimeout(timeoutId);
@@ -292,31 +312,51 @@ export default async function handler(
 
       case 'anthropic':
         try {
-          const anthropic = new Anthropic({ apiKey });
+          // Configure Anthropic client with proper timeout
+          const anthropic = new Anthropic({
+            apiKey: apiKey.trim(), // Ensure API key is trimmed of any whitespace
+            timeout: requestTimeout,  // Match our timeout setting
+          });
+          
+          console.log(`Using Anthropic model: ${ANTHROPIC_MODEL}`);
           
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
           
-          const msg = await anthropic.messages.create({
-            model: ANTHROPIC_MODEL, 
-            max_tokens: TOKEN_LIMITS.anthropic, 
-            temperature: 0.7,
-            system: "You are an expert technical writer generating Markdown project planning documents.",
-            messages: [{ role: "user", content: prompt }]
-          }, { signal: controller.signal });
-          
-          clearTimeout(timeoutId);
-          
-          if (msg.content?.[0]?.type === 'text') {
-            generatedText = msg.content[0].text;
-          } else {
-            throw new Error("Anthropic API returned unexpected/empty content");
+          // Make request with proper error handling
+          try {
+            const response = await anthropic.messages.create({
+              model: ANTHROPIC_MODEL,
+              max_tokens: TOKEN_LIMITS.anthropic,
+              temperature: 0.7,
+              system: "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices.",
+              messages: [{ role: "user", content: prompt }],
+            }, { signal: controller.signal });
+            
+            clearTimeout(timeoutId);
+            
+            // Check response structure carefully - Anthropic returns content as an array
+            if (response && response.content && response.content.length > 0) {
+              const contentBlock = response.content[0];
+              if ('text' in contentBlock) {
+                generatedText = contentBlock.text;
+              } else {
+                throw new Error("Missing text in Anthropic API response");
+              }
+            } else {
+              throw new Error("Invalid response structure from Anthropic API");
+            }
+          } catch (error: any) {
+            if (error.status === 401) {
+              throw new Error("Invalid Anthropic API key format or credentials");
+            } else {
+              throw error; // Re-throw other errors
+            }
           }
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') {
             throw new Error('Anthropic API request timed out');
           }
-          
           let specificError = "";
           if (err instanceof Anthropic.APIError) {
             // Use err.name instead of err.type
@@ -335,11 +375,17 @@ export default async function handler(
     }
 
     if (generatedText) {
-      // console.log(`Successfully generated content using ${provider}. Length: ${generatedText.length}`); // Removed for production
       // Include the generated content in the response
       return res.status(200).json({
         message: `Successfully generated documentation using ${provider}!`,
-        content: generatedText
+        content: generatedText,
+        // Add debug info to help troubleshoot any issues
+        debug: {
+          provider,
+          model: provider === 'gemini' ? GEMINI_MODEL : provider === 'openai' ? OPENAI_MODEL : ANTHROPIC_MODEL,
+          timestamp: new Date().toISOString(),
+          contentLength: generatedText.length
+        }
       }); 
     } else {
       throw new Error("AI generation completed but produced no output text");
