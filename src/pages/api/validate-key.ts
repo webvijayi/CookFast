@@ -35,57 +35,123 @@ export default async function handler(
     switch (provider) {
       case 'gemini':
         try {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          // Attempt to get a model instance to validate the key
-          // Attempt to get a model instance to validate the key
+          const trimmedApiKey = apiKey.trim();
+          
+          // Basic check for non-empty string
+          if (!trimmedApiKey) {
+            throw new Error("API key cannot be empty");
+          }
+          
+          const genAI = new GoogleGenerativeAI(trimmedApiKey);
+          // Just get a model instance to validate the key
           genAI.getGenerativeModel({ model: "gemini-pro" });
-          // console.log("Gemini key validation successful (attempted to get model)."); // Removed for production
+          console.log("Gemini key validation successful");
         } catch (err) {
-          // console.error("Gemini validation error:", err); // Optional: Keep for server-side debugging
-          // Ensure a standard Error is thrown for consistent handling
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          throw new Error(`Gemini key validation failed: ${errorMessage}`);
+          console.error("Gemini validation error:", err);
+          let errorMessage = "Invalid Gemini API key";
+          
+          if (err instanceof Error) {
+            if (err.message.includes('API key')) {
+              errorMessage = "Invalid Gemini API key format or credentials";
+            } else {
+              errorMessage = err.message;
+            }
+          }
+          
+          throw new Error(errorMessage);
         }
         break;
 
       case 'openai':
         try {
-          const openai = new OpenAI({ apiKey });
+          const trimmedApiKey = apiKey.trim();
+          
+          // Basic check for non-empty string starting with sk-
+          if (!trimmedApiKey || !trimmedApiKey.startsWith('sk-')) {
+            throw new Error("OpenAI API key must start with 'sk-'");
+          }
+          
+          const openai = new OpenAI({ apiKey: trimmedApiKey });
+          // Simple call to list models
           await openai.models.list();
-          // console.log("OpenAI key validation successful (listed models)."); // Removed for production
+          console.log("OpenAI key validation successful");
         } catch (err) {
-           // console.error("OpenAI validation error:", err); // Keep error logging if desired, or replace with proper logger
-            let specificError = "";
-            if (err instanceof OpenAI.APIError) {
-                 specificError = ` (Status: ${err.status}, Type: ${err.type})`;
-            }
-           if (err instanceof OpenAI.AuthenticationError || (err instanceof OpenAI.APIError && err.status === 401)) {
-                throw new Error(`OpenAI key validation failed: Invalid API Key.`);
-           }
-           throw new Error(`OpenAI key validation failed: ${err instanceof Error ? err.message : 'Unknown error'}${specificError}`);
+          console.error("OpenAI validation error:", err);
+          let errorMessage = "Invalid OpenAI API key";
+          
+          if (err instanceof OpenAI.AuthenticationError || 
+              (err instanceof OpenAI.APIError && err.status === 401)) {
+            errorMessage = "Authentication failed: Invalid OpenAI API key";
+          } else if (err instanceof OpenAI.APIError) {
+            errorMessage = `API error (${err.status}): ${err.message}`;
+          } else if (err instanceof Error) {
+            errorMessage = err.message;
+          }
+          
+          throw new Error(errorMessage);
         }
         break;
 
       case 'anthropic':
         try {
-          const anthropic = new Anthropic({ apiKey });
-          await anthropic.messages.create({
-            model: "claude-3-haiku-20240307",
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'hello' }],
-          });
-          // console.log("Anthropic key validation successful (sent test message)."); // Removed for production
-        } catch (err) {
-           // console.error("Anthropic validation error:", err); // Keep error logging if desired, or replace with proper logger
-            let specificError = "";
-             if (err instanceof Anthropic.APIError) {
-                 // Use err.name instead of err.type
-                 specificError = ` (Status: ${err.status}, Name: ${err.name})`;
-             }
-            if (err instanceof Anthropic.AuthenticationError || (err instanceof Anthropic.APIError && (err.status === 401 || err.status === 403))) {
-                 throw new Error(`Anthropic key validation failed: Invalid API Key.`);
+          // Minimal format check - just ensure it starts with sk-
+          const trimmedApiKey = apiKey.trim();
+          
+          // Basic check that it's a non-empty string starting with sk-
+          if (!trimmedApiKey || !trimmedApiKey.startsWith('sk-')) {
+            throw new Error("API key must start with 'sk-'");
+          }
+          
+          // Now attempt to authenticate using a model that should be available to all users
+          const anthropic = new Anthropic({ apiKey: trimmedApiKey });
+          
+          // Use a lightweight model and request for quick validation
+          // Use a model that should be available to most API keys
+          try {
+            await anthropic.messages.create({
+              model: "claude-3-haiku-20240307", // Use a widely available model for validation
+              max_tokens: 1, // Minimal tokens for quick validation
+              messages: [{ role: 'user', content: 'hello' }],
+            });
+          } catch (modelErr) {
+            // If the model is not available, try the latest model
+            if (modelErr instanceof Error && 
+                (modelErr.message.includes('not found') || modelErr.message.includes('model'))) {
+              // Try another model
+              await anthropic.messages.create({
+                model: "claude-3-sonnet-20240229", // Fallback to older model
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'hello' }],
+              });
+            } else {
+              throw modelErr; // Re-throw if it's not a model error
             }
-           throw new Error(`Anthropic key validation failed: ${err instanceof Error ? err.message : 'Unknown error'}${specificError}`);
+          }
+          
+          // If we get here, the key is valid
+          console.log("Anthropic key validation successful");
+        } catch (err) {
+          // Handle specific error cases for better user feedback
+          let errorMessage = "Anthropic key validation failed";
+          
+          if (err instanceof Anthropic.APIError) {
+            // Handle common error codes
+            if (err.status === 401) {
+              errorMessage = "Authentication failed: Invalid Anthropic API key";
+            } else if (err.status === 403) {
+              errorMessage = "Access denied: This API key doesn't have permission to use Claude";
+            } else if (err.status === 404) {
+              errorMessage = "Model not found: Please check available models for your API key";
+            } else if (err.status === 429) {
+              errorMessage = "Rate limit exceeded: Please try again later";
+            } else {
+              errorMessage = `API error (${err.status}): ${err.message}`;
+            }
+          } else if (err instanceof Error) {
+            errorMessage = err.message;
+          }
+          
+          throw new Error(errorMessage);
         }
         break;
 

@@ -112,16 +112,21 @@ function buildPrompt(details: ProjectDetails, docs: DocumentSelection): string {
 
 // Function to validate API key format (basic check)
 function validateApiKey(provider: string, apiKey: string): boolean {
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    return false;
+  }
+  
+  const trimmedKey = apiKey.trim();
+  
   switch (provider) {
     case 'openai':
-      return /^sk-[A-Za-z0-9]{32,}$/.test(apiKey);
+      return trimmedKey.startsWith('sk-');
     case 'anthropic':
-      // Updated to match current Anthropic API key format
-      // They typically start with 'sk-ant-' followed by at least 24 alphanumeric chars
-      // But allow for longer keys as formats might evolve
-      return /^sk-ant-[A-Za-z0-9]{24,}$/.test(apiKey);
+      // Only check that Anthropic keys start with sk-
+      return trimmedKey.startsWith('sk-');
     case 'gemini':
-      return /^[A-Za-z0-9_-]{39}$/.test(apiKey);
+      // Gemini keys don't have a consistent prefix, just check it's not empty
+      return trimmedKey.length > 0;
     default:
       return false;
   }
@@ -312,10 +317,17 @@ export default async function handler(
 
       case 'anthropic':
         try {
+          // Simple API key check
+          const trimmedApiKey = apiKey.trim();
+          
+          if (!trimmedApiKey || !trimmedApiKey.startsWith('sk-')) {
+            throw new Error("Invalid Anthropic API key format: must start with 'sk-'");
+          }
+          
           // Configure Anthropic client with proper timeout
           const anthropic = new Anthropic({
-            apiKey: apiKey.trim(), // Ensure API key is trimmed of any whitespace
-            timeout: requestTimeout,  // Match our timeout setting
+            apiKey: trimmedApiKey, 
+            timeout: requestTimeout,
           });
           
           console.log(`Using Anthropic model: ${ANTHROPIC_MODEL}`);
@@ -323,7 +335,7 @@ export default async function handler(
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
           
-          // Make request with proper error handling
+          // Make a single request - let the API validate the key and model availability
           try {
             const response = await anthropic.messages.create({
               model: ANTHROPIC_MODEL,
@@ -347,8 +359,17 @@ export default async function handler(
               throw new Error("Invalid response structure from Anthropic API");
             }
           } catch (error: any) {
+            // Enhanced error handling with more specific messages
             if (error.status === 401) {
-              throw new Error("Invalid Anthropic API key format or credentials");
+              throw new Error("Authentication failed: Invalid Anthropic API key");
+            } else if (error.status === 400) {
+              throw new Error(`Anthropic API error: ${error.message || 'Bad request'}`); 
+            } else if (error.status === 403) {
+              throw new Error("Access denied: This API key doesn't have permission to use this Claude model");
+            } else if (error.status === 404) {
+              throw new Error("Model not found: The specified Claude model isn't available with this API key");
+            } else if (error.status === 429) {
+              throw new Error("Rate limit exceeded: Please try again later");
             } else {
               throw error; // Re-throw other errors
             }
@@ -392,8 +413,42 @@ export default async function handler(
     }
 
   } catch (error) {
-    // console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error); // Keep error logging if desired, or replace with proper logger
+    // Log the error on the server side for debugging
+    console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error);
+    
+    // Handle API key related issues for all providers
+    if (error instanceof Error) {
+      const errorMessage = error.message;
+      
+      // Check for authentication/API key errors for any provider
+      if (
+        errorMessage.includes('API key') || 
+        errorMessage.includes('Authentication') ||
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('auth') ||
+        errorMessage.includes('format') ||
+        errorMessage.includes('401') ||
+        errorMessage.includes('403') ||
+        errorMessage.includes('key') ||
+        errorMessage.includes('credential')
+      ) {
+        return res.status(400).json({
+          error: errorMessage,
+          code: 'INVALID_API_KEY_FORMAT'
+        });
+      }
+      
+      // Check for model not found errors
+      if (errorMessage.includes('model') && 
+          (errorMessage.includes('not found') || errorMessage.includes('404'))) {
+        return res.status(400).json({
+          error: errorMessage,
+          code: 'MODEL_NOT_FOUND'
+        });
+      }
+    }
 
+    // Generic error handling for all other cases
     const message = error instanceof Error ? error.message : 'An unknown error occurred';
     const errorCode = error instanceof Error && 'code' in error ? (error as any).code : 'INTERNAL_SERVER_ERROR';
     
