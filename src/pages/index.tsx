@@ -46,6 +46,7 @@ export default function CookFastHome() {
   const [debugLogs, setDebugLogs] = useState<Array<{timestamp: string, event: string, details: any}>>([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [generationStage, setGenerationStage] = useState<string>('');
+  const [documentSections, setDocumentSections] = useState<Array<{title: string, content: string}>>([]);
   <Head>
     <title>CookFast | AI Documentation Generator</title>
     <meta name="description" content="CookFast uses AI to auto-generate project documentation, templates, and guides. Supports OpenAI, Anthropic, and Gemini." />
@@ -233,6 +234,20 @@ export default function CookFastHome() {
         setGenerationStage('Generation complete!');
         setResults(data.message);
         setGeneratedMarkdown(data.content);
+
+        // Use server-parsed sections if available, otherwise parse client-side
+        if (data.sections && data.sections.length > 0) {
+          setDocumentSections(data.sections);
+        } else {
+          // Fallback to client-side parsing if the API didn't return sections
+          parseMarkdownSections(data.content);
+        }
+
+        // Add generation time to the result message if available
+        if (data.debug?.processingTimeMs) {
+          const processingTimeSeconds = Math.round(data.debug.processingTimeMs / 1000);
+          setResults(`${data.message} (Generated in ${processingTimeSeconds} seconds)`);
+        }
         addDebugLog('Generation Successful', { messageLength: data.message.length, contentLength: data.content.length });
       } else {
         setGenerationStage('Generation failed');
@@ -250,6 +265,77 @@ export default function CookFastHome() {
   };
 
   const formatLabel = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).replace(/ Doc$/, ' Document').trim();
+
+// Parse markdown content into sections based on H1 headers
+const parseMarkdownSections = (markdown: string): Array<{title: string, content: string}> => {
+  if (!markdown) return [];
+  
+  // Split the markdown by level 1 headings (# )
+  const sections: Array<{title: string, content: string}> = [];
+  
+  // Use regex to find all level 1 headings and their content
+  const regex = /^# (.+)$/gm;
+  let match;
+  let lastIndex = 0;
+  let lastTitle = '';
+  
+  // Find all matches
+  while ((match = regex.exec(markdown)) !== null) {
+    // If this isn't the first heading, save the previous section
+    if (lastTitle) {
+      const sectionContent = markdown.substring(lastIndex, match.index).trim();
+      sections.push({ title: lastTitle, content: sectionContent });
+    }
+    
+    // Update for the next iteration
+    lastTitle = match[1];
+    lastIndex = match.index;
+  }
+  
+  // Don't forget the last section
+  if (lastTitle) {
+    const sectionContent = markdown.substring(lastIndex).trim();
+    sections.push({ title: lastTitle, content: sectionContent });
+  }
+  
+  // If no sections were found, treat the entire document as one section
+  if (sections.length === 0 && markdown.trim().length > 0) {
+    sections.push({ title: 'Documentation', content: markdown });
+  }
+  
+  setDocumentSections(sections);
+  return sections;
+};
+
+// Helper function to download content as a file
+const downloadContent = (content: string, filename: string) => {
+  const element = document.createElement('a');
+  const file = new Blob([content], {type: 'text/markdown'});
+  element.href = URL.createObjectURL(file);
+  element.download = filename;
+  document.body.appendChild(element);
+  element.click();
+  document.body.removeChild(element);
+};
+
+// Helper function to copy content to clipboard
+const copyToClipboard = (content: string) => {
+  navigator.clipboard.writeText(content).then(
+    () => {
+      // Show a temporary success message
+      const notification = document.getElementById('copy-notification');
+      if (notification) {
+        notification.classList.remove('hidden');
+        setTimeout(() => {
+          notification.classList.add('hidden');
+        }, 2000);
+      }
+    },
+    (err) => {
+      console.error('Failed to copy text: ', err);
+    }
+  );
+};
   // --- End Handlers ---
 
 
@@ -392,20 +478,22 @@ export default function CookFastHome() {
 
             {/* Step 4: Generate! (Submission Button) */}
             <div className="pt-6 text-center">
-              <button
-                type="submit"
-                disabled={isLoading || !projectDetails.projectName || !userApiKey /*|| keyValidationStatus !== 'valid'*/} // Optionally enforce valid key
-                className={`inline-flex items-center justify-center py-3 px-10 border border-transparent shadow-md text-base font-semibold rounded-full text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-800 transition-all duration-150 ease-in-out ${ 
-                   isLoading || !projectDetails.projectName || !userApiKey /*|| keyValidationStatus !== 'valid'*/
-                    ? 'bg-gray-400 dark:bg-slate-600 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 dark:from-blue-500 dark:via-indigo-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:via-indigo-600 dark:hover:to-purple-600 transform hover:scale-105'
-                 }`}
-              >
-                 {isLoading ? <>
-                    <SpinnerIcon /> 
-                    <span className="ml-1">{generationStage || 'Generating...'}</span>
-                  </> : <><GenerateIcon /> Cook Up Docs!</>}
-              </button>
+              <div className="flex flex-col items-center">
+                <button
+                  type="submit"
+                  disabled={isLoading || !projectDetails.projectName || !userApiKey /*|| keyValidationStatus !== 'valid'*/} // Optionally enforce valid key
+                  className={`inline-flex items-center justify-center py-3 px-10 border border-transparent shadow-md text-base font-semibold rounded-full text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-800 transition-all duration-150 ease-in-out ${ 
+                     isLoading || !projectDetails.projectName || !userApiKey /*|| keyValidationStatus !== 'valid'*/
+                      ? 'bg-gray-400 dark:bg-slate-600 cursor-not-allowed' 
+                      : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 dark:from-blue-500 dark:via-indigo-500 dark:to-purple-500 dark:hover:from-blue-600 dark:hover:via-indigo-600 dark:hover:to-purple-600 transform hover:scale-105'
+                   }`}
+                >
+                   {isLoading ? <>
+                      <SpinnerIcon /> 
+                      <span className="ml-1">{generationStage || 'Generating...'}</span>
+                    </> : <><GenerateIcon /> Cook Up Docs!</>}
+                </button>
+              </div>
             </div>
           </form>
 
@@ -414,14 +502,84 @@ export default function CookFastHome() {
           {/* Results/Error Display Area */}
           <div className="mt-8 space-y-4">
              {results && (
-              <div className="p-5 bg-green-100 dark:bg-green-900/50 border border-green-300 dark:border-green-700/50 rounded-lg shadow text-green-800 dark:text-green-200">
-                <h3 className="font-semibold text-lg mb-2">Generation Successful!</h3>
+              <div className="p-5 bg-green-100 dark:bg-green-900/50 border border-green-300 dark:border-green-700/50 rounded-lg shadow text-green-800 dark:text-green-200 transition-all duration-300 ease-in-out">
+                <h3 className="font-semibold text-lg mb-2 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Generation Successful!
+                </h3>
                 <p className="text-sm mb-4">{results}</p>
-                {/* Display generated markdown content */}
-                {generatedMarkdown && (
-                  <pre className="mt-4 p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words overflow-auto max-h-96">
-                    <code>{generatedMarkdown}</code>
-                  </pre>
+                
+                {/* Document actions */}
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <button
+                    onClick={() => downloadContent(generatedMarkdown, `${projectDetails.projectName.replace(/\s+/g, '-')}-documentation.md`)}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download All
+                  </button>
+                  
+                  <button
+                    onClick={() => copyToClipboard(generatedMarkdown)}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                    </svg>
+                    Copy All
+                  </button>
+                  
+                  <span id="copy-notification" className="hidden text-xs font-medium text-white bg-gray-700 px-2 py-1 rounded-md">
+                    Copied to clipboard!
+                  </span>
+                </div>
+                
+                {/* Display generated markdown content by sections */}
+                {documentSections && documentSections.length > 0 ? (
+                  <div className="space-y-6">
+                    {documentSections.map((section, index) => (
+                      <div key={index} className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                        <div className="flex justify-between items-center bg-gray-50 dark:bg-slate-700 px-4 py-3 border-b border-gray-200 dark:border-slate-600">
+                          <h4 className="font-semibold text-sm">{section.title}</h4>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => copyToClipboard(section.content)}
+                              className="text-xs p-1 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600"
+                              title="Copy section"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => downloadContent(section.content, `${projectDetails.projectName.replace(/\s+/g, '-')}-${section.title.replace(/\s+/g, '-')}.md`)}
+                              className="text-xs p-1 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600"
+                              title="Download section"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-white dark:bg-slate-800 text-xs text-gray-800 dark:text-gray-200">
+                          <pre className="whitespace-pre-wrap break-words overflow-auto max-h-96">
+                            <code>{section.content}</code>
+                          </pre>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  generatedMarkdown && (
+                    <pre className="mt-4 p-4 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words overflow-auto max-h-96">
+                      <code>{generatedMarkdown}</code>
+                    </pre>
+                  )
                 )}
               </div>
             )}
@@ -435,7 +593,7 @@ export default function CookFastHome() {
           
           {/* Debug Button & Panel */}
           <div className="mt-6">
-            <div className="flex justify-center mb-4">
+            <div className="flex flex-col items-center mb-4">
               <button 
                 onClick={() => setShowDebugPanel(!showDebugPanel)} 
                 className="text-xs px-4 py-2 rounded-md bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors flex items-center"
@@ -446,6 +604,15 @@ export default function CookFastHome() {
                 </svg>
                 {showDebugPanel ? 'Hide Debug Panel' : 'Show Debug Panel'}
               </button>
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center bg-blue-50 dark:bg-blue-900/20 rounded-md p-2 max-w-md border border-blue-100 dark:border-blue-800/30">
+                <p className="flex items-center justify-center mb-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-blue-500 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-medium text-blue-700 dark:text-blue-300">Note</span>
+                </p>
+                <p>Document generation can take up to 5 minutes depending on complexity. If one provider fails, try another. We recommend Claude 3.7 Sonnet for best results.</p>
+              </div>
             </div>
             
             {/* Debug Info Area */}

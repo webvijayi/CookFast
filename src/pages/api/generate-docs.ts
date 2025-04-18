@@ -44,12 +44,18 @@ interface GenerateDocsRequestBody {
 
 type SuccessResponse = { 
   message: string;
-  content: string; // Added to return the generated content
+  content: string; // Full content in markdown format
+  // Add structure to return parsed document sections
+  sections?: Array<{
+    title: string;
+    content: string;
+  }>;
   debug?: {
     provider: string;
     model: string;
     timestamp: string;
     contentLength: number;
+    processingTimeMs?: number;
   }
 }
 
@@ -110,6 +116,46 @@ function buildPrompt(details: ProjectDetails, docs: DocumentSelection): string {
   return promptString;
 }
 
+// Function to parse markdown content into sections based on H1 headers
+function parseMarkdownSections(markdown: string): Array<{title: string, content: string}> {
+  if (!markdown) return [];
+  
+  // Split the markdown by level 1 headings (# )
+  const sections: Array<{title: string, content: string}> = [];
+  
+  // Use regex to find all level 1 headings and their content
+  const regex = /^# (.+)$/gm;
+  let match;
+  let lastIndex = 0;
+  let lastTitle = '';
+  
+  // Find all matches
+  while ((match = regex.exec(markdown)) !== null) {
+    // If this isn't the first heading, save the previous section
+    if (lastTitle) {
+      const sectionContent = markdown.substring(lastIndex, match.index).trim();
+      sections.push({ title: lastTitle, content: sectionContent });
+    }
+    
+    // Update for the next iteration
+    lastTitle = match[1];
+    lastIndex = match.index;
+  }
+  
+  // Don't forget the last section
+  if (lastTitle) {
+    const sectionContent = markdown.substring(lastIndex).trim();
+    sections.push({ title: lastTitle, content: sectionContent });
+  }
+  
+  // If no sections were found, treat the entire document as one section
+  if (sections.length === 0 && markdown.trim().length > 0) {
+    sections.push({ title: 'Documentation', content: markdown });
+  }
+  
+  return sections;
+}
+
 // Function to validate API key format (basic check)
 function validateApiKey(provider: string, apiKey: string): boolean {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
@@ -155,6 +201,9 @@ export default async function handler(
 
   // Declare provider variable here, allowing it to be accessible in catch block
   let provider: GenerateDocsRequestBody['provider'] | undefined;
+  
+  // Record start time for performance tracking
+  const startTime = Date.now();
   
   try {
     const { 
@@ -396,16 +445,25 @@ export default async function handler(
     }
 
     if (generatedText) {
-      // Include the generated content in the response
+      // Parse the markdown content into sections for better display
+      const sections = parseMarkdownSections(generatedText);
+      
+      // Record end time and calculate processing time
+      const endTime = Date.now();
+      const processingTimeMs = endTime - startTime;
+      
+      // Include the generated content and sections in the response
       return res.status(200).json({
         message: `Successfully generated documentation using ${provider}!`,
         content: generatedText,
+        sections: sections,
         // Add debug info to help troubleshoot any issues
         debug: {
           provider,
           model: provider === 'gemini' ? GEMINI_MODEL : provider === 'openai' ? OPENAI_MODEL : ANTHROPIC_MODEL,
           timestamp: new Date().toISOString(),
-          contentLength: generatedText.length
+          contentLength: generatedText.length,
+          processingTimeMs: processingTimeMs
         }
       }); 
     } else {
