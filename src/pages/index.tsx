@@ -20,6 +20,27 @@ interface DocumentSelection {
   fileStructure: boolean;
 }
 
+interface DocumentSection {
+  title: string;
+  content: string;
+}
+
+interface ProjectJSON {
+  project: ProjectDetails;
+  documents: {
+    [key: string]: {
+      content: string;
+      sections: DocumentSection[];
+    };
+  };
+  metadata: {
+    generatedWith: string;
+    timestamp: string;
+    provider?: string;
+    model?: string;
+  };
+}
+
 // Define the AI providers
 type AIProvider = 'gemini' | 'openai' | 'anthropic';
 
@@ -38,6 +59,7 @@ const GitHubIcon = () => (
 const CheckIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> );
 const SpinnerIcon = () => ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> );
 const GenerateIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h8V3a1 1 0 112 0v1h1a2 2 0 012 2v11a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2h1V3a1 1 0 011-1zm10 7H5v6h10V9z" clipRule="evenodd" /></svg> );
+const JsonIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" /></svg> );
 // --- End SVG Icons ---
 
 
@@ -336,8 +358,85 @@ const copyToClipboard = (content: string) => {
     }
   );
 };
-  // --- End Handlers ---
 
+// Function to convert markdown content to structured JSON
+const convertToJSON = (): ProjectJSON => {
+  // Create document structure based on sections
+  const documentsObj: { [key: string]: { content: string, sections: DocumentSection[] } } = {};
+  
+  // Group sections by document type
+  documentSections.forEach(section => {
+    // Extract document type from section title
+    const titleLower = section.title.toLowerCase();
+    let docType = 'general';
+    
+    // Map section titles to document types
+    if (titleLower.includes('requirement')) docType = 'requirements';
+    else if (titleLower.includes('frontend')) docType = 'frontendGuidelines';
+    else if (titleLower.includes('backend')) docType = 'backendStructure';
+    else if (titleLower.includes('flow')) docType = 'appFlow';
+    else if (titleLower.includes('tech stack')) docType = 'techStackDoc';
+    else if (titleLower.includes('system prompt')) docType = 'systemPrompts';
+    else if (titleLower.includes('file') && titleLower.includes('structure')) docType = 'fileStructure';
+    
+    // Initialize document type if it doesn't exist
+    if (!documentsObj[docType]) {
+      documentsObj[docType] = {
+        content: '',
+        sections: []
+      };
+    }
+    
+    // Add the section
+    documentsObj[docType].sections.push(section);
+    
+    // Append to the full content
+    if (documentsObj[docType].content) {
+      documentsObj[docType].content += '\n\n';
+    }
+    documentsObj[docType].content += `# ${section.title}\n${section.content}`;
+  });
+  
+  // Create the full JSON structure
+  return {
+    project: projectDetails,
+    documents: documentsObj,
+    metadata: {
+      generatedWith: 'CookFast',
+      timestamp: new Date().toISOString(),
+      provider: selectedProvider,
+      model: selectedProvider === 'gemini' ? 'gemini-2.5-pro-exp-03-25' : 
+             selectedProvider === 'openai' ? 'gpt-4o' : 
+             'claude-3-7-sonnet-20250219'
+    }
+  };
+};
+
+// Helper function to download JSON content
+const downloadJSON = () => {
+  if (!generatedMarkdown) return;
+  
+  const jsonData = convertToJSON();
+  const jsonString = JSON.stringify(jsonData, null, 2);
+  const filename = `${projectDetails.projectName.replace(/\s+/g, '-').toLowerCase() || 'project'}-docs.json`;
+  
+  // Create a blob from the JSON string
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  // Create a temporary link and trigger download
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  
+  // Clean up
+  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  
+  addDebugLog('JSON Exported', { filename, byteSize: jsonString.length });
+};
 
   return (
     // Removed conditional 'dark' class here; it should rely on the class on <html>
@@ -514,7 +613,7 @@ const copyToClipboard = (content: string) => {
                 {/* Document actions */}
                 <div className="flex flex-wrap gap-3 mb-4">
                   <button
-                    onClick={() => generatedMarkdown && downloadContent(generatedMarkdown, `${projectDetails.projectName.replace(/\s+/g, '-')}-documentation.md`)}
+                    onClick={() => generatedMarkdown && downloadContent(generatedMarkdown, `${projectDetails.projectName.replace(/\s+/g, '-').toLowerCase() || 'project'}-docs.md`)}
                     className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors"
                     disabled={!generatedMarkdown}
                   >
@@ -535,9 +634,30 @@ const copyToClipboard = (content: string) => {
                     Copy All
                   </button>
                   
+                  <button
+                    onClick={downloadJSON}
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                    title="Export as a structured JSON file for AI-powered IDEs"
+                  >
+                    <JsonIcon />
+                    <span className="ml-1">Export JSON</span>
+                  </button>
+                  
                   <span id="copy-notification" className="hidden text-xs font-medium text-white bg-gray-700 px-2 py-1 rounded-md">
                     Copied to clipboard!
                   </span>
+                </div>
+                
+                {/* JSON Export Info */}
+                <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md text-sm text-green-800 dark:text-green-200">
+                  <p className="flex items-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9z" clipRule="evenodd" />
+                    </svg>
+                    <span>
+                      <strong>NEW:</strong> Export to JSON for AI-powered IDE integration! The structured JSON format works with tools like Cursor, Windsurf, Aider, and other AI coding assistants.
+                    </span>
+                  </p>
                 </div>
                 
                 {/* Display generated markdown content by sections */}
@@ -549,21 +669,21 @@ const copyToClipboard = (content: string) => {
                           <h4 className="font-semibold text-sm">{section.title}</h4>
                           <div className="flex space-x-2">
                             <button
+                              onClick={() => downloadContent(section.content, `${projectDetails.projectName.replace(/\s+/g, '-').toLowerCase() || 'project'}-${section.title.replace(/\s+/g, '-').toLowerCase()}.md`)}
+                              className="text-xs p-1 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600"
+                              title="Download section"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </button>
+                            <button
                               onClick={() => copyToClipboard(section.content)}
                               className="text-xs p-1 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600"
                               title="Copy section"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => downloadContent(section.content, `${projectDetails.projectName.replace(/\s+/g, '-')}-${section.title.replace(/\s+/g, '-')}.md`)}
-                              className="text-xs p-1 rounded text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600"
-                              title="Download section"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
                             </button>
                           </div>
@@ -682,6 +802,47 @@ const copyToClipboard = (content: string) => {
 
         </div>
       </main>
+
+      {/* Features Section */}
+      <section className="mb-8 max-w-3xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-4">Features</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300 text-sm">
+          <li><strong>Multiple AI Providers:</strong> Gemini, OpenAI, Anthropic</li>
+          <li><strong>Flexible Document Types:</strong> Requirements, Frontend Guidelines, Backend Structure, App Flow, Tech Stack Docs, System Prompts, File Structure</li>
+          <li><strong>Markdown & JSON Export:</strong> Download as .md or structured JSON for AI IDE integration</li>
+          <li><strong>Mermaid Diagrams:</strong> Auto-generated sequence and flow diagrams</li>
+          <li><strong>Secure Key Handling:</strong> API keys never stored</li>
+          <li><strong>Rate Limiting:</strong> Prevents abuse</li>
+          <li><strong>Dark Mode:</strong> Light and dark themes supported</li>
+        </ul>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="mt-12 mb-12 max-w-3xl mx-auto">
+        <h2 className="text-2xl font-semibold mb-4">FAQs</h2>
+        <div className="space-y-4 text-sm text-gray-700 dark:text-gray-300">
+          <div>
+            <h3 className="font-medium">What is CookFast?</h3>
+            <p>CookFast is a free, open-source alternative to CodeGuide.dev that generates comprehensive project planning documents in Markdown or JSON. It integrates seamlessly with AI-powered IDEs like Windsurf, Cursor, Aider, and Cline, letting you turn any idea into a startable project in minutes.</p>
+          </div>
+          <div>
+            <h3 className="font-medium">How does it work?</h3>
+            <p>Enter your project details, select the documents you need, choose an AI provider, and CookFast will generate comprehensive planning docs.</p>
+          </div>
+          <div>
+            <h3 className="font-medium">Which AI providers are supported?</h3>
+            <p>Currently, CookFast supports Google Gemini, OpenAI, and Anthropic models.</p>
+          </div>
+          <div>
+            <h3 className="font-medium">How do I use JSON export?</h3>
+            <p>After generation, click the <strong>Export JSON</strong> button to download a structured JSON file for use with AI coding assistants.</p>
+          </div>
+          <div>
+            <h3 className="font-medium">Is my API key saved?</h3>
+            <p>No, API keys are validated client-side and never stored by CookFast.</p>
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="text-center py-8 mt-12 border-t border-gray-200 dark:border-slate-700 text-sm text-gray-600 dark:text-slate-400">

@@ -21,8 +21,25 @@ CookFast is a web application built with Next.js that helps you quickly generate
 *   **Rate Limiting:** Basic API rate limiting is implemented to prevent abuse.
 *   **Dark Mode:** Toggle between light and dark themes for comfortable viewing.
 *   **Built with Modern Tech:** Next.js, React, TypeScript, Tailwind CSS.
+*   **JSON Export:** Download a structured JSON file with project details and document sections for AI IDE integration (e.g., Cursor, Windsurf, Aider).
 
 ---
+## 🧑‍🍳 Frequently Asked Questions
+
+1. **What is CookFast?**  
+   CookFast is an AI-powered tool that generates project planning documents in Markdown or JSON formats to help you start coding faster.
+
+2. **How does it work?**  
+   Enter your project details, select the document types you need, choose an AI provider, and CookFast will generate comprehensive docs.
+
+3. **Which AI providers are supported?**  
+   Currently, CookFast supports Google Gemini, OpenAI, and Anthropic models.
+
+4. **What formats can I export?**  
+   You can download your generated docs as Markdown files or as a structured JSON file optimized for AI code assistants.
+
+5. **Is my API key saved?**  
+   No. API keys are validated client-side and never stored by CookFast.
 
 ## Getting Started
 
