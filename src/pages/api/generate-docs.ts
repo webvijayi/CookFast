@@ -1,20 +1,19 @@
 /* eslint-disable */
-import type { NextApiRequest, NextApiResponse } from 'next';
+// Timestamp: ${new Date().toISOString()} - Improved API implementation with error handling and response processing
+import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { rateLimit } from '../../utils/rate-limiter';
 
 // For environments that have issues with the native fetch implementation
 import fetch from 'cross-fetch';
 global.fetch = fetch;
 
-// Initialize the rate limiter (e.g., 10 requests per minute per IP)
-const limiter = rateLimit({
-  interval: 60 * 1000, // 60 seconds
-  uniqueTokenPerInterval: 500, // Max 500 unique IPs per interval
-});
+// Add custom type for Gemini response part
+type GeminiPart = string | { text?: string; [key: string]: any };
 
+// Default timeout for API requests (30 seconds)
+const API_TIMEOUT_MS = 120000; // 2 minutes
 
 // Interfaces
 interface ProjectDetails {
@@ -35,6 +34,11 @@ interface DocumentSelection {
   fileStructure: boolean;
 }
 
+interface DocumentSection {
+  title: string;
+  content: string;
+}
+
 interface GenerateDocsRequestBody {
   projectDetails: ProjectDetails;
   selectedDocs: DocumentSelection;
@@ -42,33 +46,32 @@ interface GenerateDocsRequestBody {
   apiKey: string;
 }
 
-type SuccessResponse = { 
+interface SuccessResponse {
   message: string;
-  content: string; // Full content in markdown format
-  // Add structure to return parsed document sections
-  sections?: Array<{
-    title: string;
-    content: string;
-  }>;
+  content: string;
+  sections?: DocumentSection[];
   debug?: {
     provider: string;
     model: string;
     timestamp: string;
     contentLength: number;
-    processingTimeMs?: number;
-  }
+    processingTimeMs: number;
+    sectionsCount?: number;
+  };
 }
 
-type ErrorResponse = { 
+interface ErrorResponse {
+  message: string;
+  content: string;
   error: string;
-  code?: string;
 }
 
-// Constants
+// Constants - Updated with current model versions
 const GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"; // Using exactly the model shown on the frontend
 const OPENAI_MODEL = "gpt-4o"; // Current OpenAI model
 const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Updated to Claude 3.7 Sonnet
 
+// Safety settings for Gemini
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -78,79 +81,339 @@ const safetySettings = [
 
 // Token limits per provider (Maintaining higher limits as we've increased the timeout)
 const TOKEN_LIMITS = {
-  gemini: 8192,    // Higher limit for comprehensive documents
-  openai: 8192,    // For gpt-4o
-  anthropic: 32768  // Claude 3.7 Sonnet can handle even larger outputs
+  gemini: 30000,    // Increased for more comprehensive documents
+  openai: 16000,    // For gpt-4o
+  anthropic: 100000  // Claude 3.7 Sonnet can handle even larger outputs
 };
 
-// Helper Function to Build Prompt
-function buildPrompt(details: ProjectDetails, docs: DocumentSelection): string {
-  const selectedDocList = Object.entries(docs)
-    .filter(([, value]) => value)
-    .map(([key]) => `- ${key.replace(/([A-Z])/g, ' $1').trim()}`)
-    .join('\n');
+// Helper function to create a timeout promise
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
+  let timeoutId: NodeJS.Timeout;
+  
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    promise,
+    timeoutPromise
+  ]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+};
+
+// Create a simple rate limiter
+const rateLimiter = {
+  // Store for tracking request counts
+  store: new Map<string, { count: number, resetTime: number }>(),
+  
+  // Limit function to check and update rate limits
+  limit: async (key: string, maxRequests: number = 5, windowMs: number = 60000): Promise<{ success: boolean }> => {
+    const now = Date.now();
+    const record = rateLimiter.store.get(key) || { count: 0, resetTime: now + windowMs };
     
-  const mermaidExample = '```mermaid\nsequenceDiagram\n    participant User\n    participant Browser\n    participant Server\n    User->>Browser: Request page\n    Browser->>Server: GET /resource\n    Server-->>Browser: HTML page\n    Browser-->>User: Display page\n```';
-
-  let promptString = "Act as an expert technical writer and software architect specialized in creating comprehensive project planning documents.\n";
-  promptString += "Your task is to generate the requested preliminary planning documentation in **Markdown format** for the software project described below.\n\n";
-  promptString += "**Project Context:**\n";
-  promptString += `* **Project Name:** ${details.projectName || '(Not specified)'}\n`;
-  promptString += `* **Project Type:** ${details.projectType || '(Not specified)'}\n`;
-  promptString += `* **Main Goal/Purpose:** ${details.projectGoal || '(Not specified)'}\n`;
-  promptString += `* **Key Features:** ${details.features || '(Not specified)'}\n`;
-  promptString += `* **Known Tech Stack Hints:** ${details.techStack || '(Not specified)'}\n\n`;
-  promptString += "**Requested Documents:**\n";
-  promptString += `Generate the following documents, ensuring each starts with a clear Level 1 Markdown heading (e.g., '# Project Requirements Document'):\n${selectedDocList || '(No specific documents selected - provide a general project overview if possible)'}\n\n`;
-  promptString += "**Detailed Instructions & Formatting:**\n";
-  promptString += "* **Markdown Usage:** Utilize Markdown extensively for structure and readability (headings, subheadings, lists, bold/italics, code blocks for examples).\n";
-  promptString += `* **Diagrams (Optional but Recommended):** Where appropriate (e.g., App Flow, Backend Structure, Database Schema), embed diagrams using **Mermaid syntax** within Markdown code blocks. Suggest relevant diagram types (sequenceDiagram, classDiagram, erDiagram, flowchart). For example:\n${mermaidExample}\n`;
-  promptString += "* **Content Generation:**\n";
-  promptString += "    * Tailor the content specifically to the **Project Type** and **Key Features** provided.\n";
-  promptString += "    * Incorporate relevant **software development best practices** for each document (e.g., mention SMART criteria for requirements, REST principles for APIs, accessibility (WCAG) for frontend, MVC/MVVM patterns, security considerations, database normalization).\n";
-  promptString += "    * Provide practical, actionable starting points. If details are sparse, make logical assumptions based on the project type and state them clearly.\n";
-  promptString += "    * **System Prompts:** If AI interaction seems relevant based on the project description, explain the purpose of system prompts and provide illustrative examples. Otherwise, state that specific system prompts might not be applicable initially.\n";
-  promptString += "    * **File Structure:** Propose a standard, logical directory layout suitable for the project type and mentioned technologies. Explain the purpose of key folders.\n";
-  promptString += "* **Output Style:** Generate only the requested document content. Do not include conversational introductions, summaries, or remarks outside the documents themselves. Ensure the output is a single, valid Markdown block containing all requested sections.\n";
-
-  return promptString;
-}
-
-// Function to parse markdown content into sections based on H1 headers
-function parseMarkdownSections(markdown: string): Array<{title: string, content: string}> {
-  if (!markdown) return [];
-  
-  // Split the markdown by level 1 headings (# )
-  const sections: Array<{title: string, content: string}> = [];
-  
-  // Use regex to find all level 1 headings and their content
-  const regex = /^# (.+)$/gm;
-  let match;
-  let lastIndex = 0;
-  let lastTitle = '';
-  
-  // Find all matches
-  while ((match = regex.exec(markdown)) !== null) {
-    // If this isn't the first heading, save the previous section
-    if (lastTitle) {
-      const sectionContent = markdown.substring(lastIndex, match.index).trim();
-      sections.push({ title: lastTitle, content: sectionContent });
+    // Reset count if window has expired
+    if (now > record.resetTime) {
+      record.count = 0;
+      record.resetTime = now + windowMs;
     }
     
-    // Update for the next iteration
-    lastTitle = match[1];
-    lastIndex = match.index;
+    // Check if limit is reached
+    if (record.count >= maxRequests) {
+      return { success: false };
+    }
+    
+    // Increment count and update store
+    record.count++;
+    rateLimiter.store.set(key, record);
+    
+    return { success: true };
+  }
+};
+
+// Helper function to parse markdown content into sections
+function parseContentToSections(content: string): DocumentSection[] {
+  const sections: DocumentSection[] = [];
+  if (!content) return sections;
+
+  const lines = content.split('\n');
+  let currentSection: DocumentSection | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]; // Keep original spacing for content, trim only for matching
+    const trimmedLine = line.trim();
+
+    // Match H1 or H2 headings (# Heading, ## Heading)
+    const match = trimmedLine.match(/^(#+)\s+(.*)/);
+    
+    if (match && match[1] && match[2]) { // Found a heading
+      const level = match[1].length; // # -> 1, ## -> 2
+      const title = match[2].trim();
+
+      // For simplicity, treat H1 and H2 as top-level sections
+      if (level <= 2) {
+        // Save the previous section if it exists and has content
+        if (currentSection && currentSection.content.trim()) {
+          sections.push({ ...currentSection, content: currentSection.content.trim() });
+        }
+        // Start a new section
+        currentSection = { title: title, content: '' }; // Start content empty
+      } else if (currentSection) {
+        // Treat lower-level headings as content of the current section
+        currentSection.content += line + '\n';
+      }
+    } else if (currentSection) {
+      // Add non-heading lines to the current section's content
+      currentSection.content += line + '\n';
+    } else {
+      // Content before the first heading (should ideally not happen with good prompts)
+      // If needed, could collect this into a default "Introduction" section
+      // console.warn("Content found before first heading:", line);
+    }
+  }
+
+  // Add the last section if it exists and has content
+  if (currentSection && currentSection.content.trim()) {
+    sections.push({ ...currentSection, content: currentSection.content.trim() });
+  }
+
+  // If no sections were parsed but content exists, return a single section
+  if (sections.length === 0 && content.trim()) {
+    console.warn("Failed to parse sections, returning content as a single section.");
+    sections.push({ title: "Generated Documentation", content: content.trim() });
+  }
+
+  return sections;
+}
+
+// Build prompt function
+function buildPrompt(projectDetails: any, selectedDocs: DocumentSelection): string {
+  // Selected document types
+  const selectedDocTypes = Object.entries(selectedDocs)
+    .filter(([_, isSelected]) => isSelected)
+    .map(([docType, _]) => docType);
+  
+  // Format the project details for the prompt
+  const projectName = projectDetails.projectName?.trim() || 'Unnamed Project';
+  const projectType = projectDetails.projectType?.trim() || 'Web Application';
+  const projectGoal = projectDetails.projectGoal?.trim() || 'No goal specified';
+  const features = projectDetails.features?.trim() || 'No specific features provided';
+  const techStack = projectDetails.techStack?.trim() || 'No specific tech stack provided';
+  
+  // Build a comprehensive prompt
+  const prompt = `
+You are a senior software architect specializing in creating detailed documentation.
+
+# PROJECT DETAILS
+- Project Name: ${projectName}
+- Project Type: ${projectType}
+- Project Goal: ${projectGoal}
+- Key Features: ${features}
+- Tech Stack: ${techStack}
+
+# INSTRUCTIONS
+Create comprehensive, professional documentation for the project described above.
+**IMPORTANT: Generate COMPLETE documentation with detailed content, NOT just an outline or section headings.** For each section requested below, provide detailed explanations, examples where applicable (like code snippets, configuration examples, or API endpoints), and narrative descriptions. Avoid simple bulleted lists for explanations; use prose.
+
+Focus on creating detailed Markdown documents for the following sections:
+
+${selectedDocTypes.includes('requirements') ? `
+## Requirements Document
+
+### Functional Requirements
+Detail each requirement with explanations. E.g., For User Authentication, describe the login process, password requirements, session handling, etc.
+
+### Non-Functional Requirements
+Elaborate on performance goals (e.g., target load times, concurrent users), security measures (e.g., specific vulnerability protections, data encryption), and scalability considerations (e.g., potential bottlenecks, scaling strategies).
+
+### Prioritization
+Briefly justify the prioritization (Must-Have, Should-Have, Nice-to-Have).
+
+### Acceptance Criteria
+Write specific, measurable criteria for key features.
+` : ''}
+
+${selectedDocTypes.includes('frontendGuidelines') ? `
+## Frontend Guidelines
+
+### UI/UX Principles & Style Guide
+Describe the design philosophy, target audience considerations, and key style elements (color palette usage, typography hierarchy, spacing rules, iconography style).
+
+### Component Architecture
+Explain the chosen component pattern (e.g., Atomic Design, simple functional components), folder structure for components, and conventions for component props and state.
+
+### State Management
+Detail the chosen approach (e.g., Context API, Redux, Zustand), explain why it was chosen, and provide examples of typical usage patterns.
+
+### Responsive Design
+Explain the breakpoints and how layouts adapt. Provide examples if necessary.
+
+### Accessibility (A11y)
+List key WCAG guidelines being followed and provide specific examples (e.g., ARIA attributes usage, keyboard navigation focus management).
+
+### Testing Strategy
+Describe the types of tests (unit, integration, E2E), tools used, and target coverage.
+` : ''}
+
+${selectedDocTypes.includes('backendStructure') ? `
+## Backend Structure
+
+### API Design
+Describe the API style (e.g., REST, GraphQL). Detail key resource endpoints with HTTP methods, request/response formats (provide JSON examples), and authentication requirements.
+
+### Database Schema
+Explain the collections/tables, fields, data types, relationships, and indexing strategies. Provide schema definition snippets if possible.
+
+### Authentication/Authorization
+Detail the mechanism (e.g., JWT, OAuth), token handling, password hashing, and role/permission implementation.
+
+### Data Models
+Explain the core data structures used within the application logic.
+
+### Middleware
+Describe the purpose and order of key middleware (logging, error handling, auth, validation).
+
+### Server Architecture
+Explain the deployment model (e.g., Monolith, Microservices), hosting environment considerations, and key infrastructure components.
+` : ''}
+
+${selectedDocTypes.includes('appFlow') ? `
+## Application Flow
+
+### User Journeys
+Describe primary user paths step-by-step in narrative form (e.g., "A new user visits the site, navigates to services, selects 'Web Development', reads the details, and clicks 'Contact Us'...").
+
+### Sequence Diagrams
+Provide key interaction flows using Mermaid syntax (\`\`\`mermaid\\nsequenceDiagram...\\n\`\`\`).
+
+### Integration Points
+Detail how major components (frontend, backend, database, external services) interact for key features.
+
+### Error Handling
+Describe common error scenarios and how they are handled and communicated to the user/system.
+
+### Data Flow
+Explain how data moves through the system for critical operations (e.g., user registration, order processing).
+` : ''}
+
+${selectedDocTypes.includes('techStackDoc') ? `
+## Technology Stack Documentation
+
+### Technology Explanations
+Provide a paragraph or two for each major technology (frameworks, libraries, databases, services) explaining *why* it was chosen and its role in the project.
+
+### Justification
+Summarize the overall rationale for the stack choices.
+
+### Infrastructure
+Detail hosting, database, CDN, CI/CD pipeline requirements and setup.
+
+### Dev Environment
+Explain how to set up the local development environment (dependencies, commands, configurations).
+
+### External Services
+List integrations, their purpose, and configuration points.
+` : ''}
+
+${selectedDocTypes.includes('systemPrompts') ? `
+## System Prompts (If Applicable)
+
+### AI Feature Prompts
+List the exact system prompts used for AI features.
+
+### Edge Case Handling
+Describe how the AI handles unclear input, errors, or unexpected scenarios.
+
+### Prompt Engineering Guidelines
+Provide best practices used for crafting effective prompts for this project.
+
+### AI Integration
+Detail how the AI service is called and how its responses are processed.
+` : ''}
+
+${selectedDocTypes.includes('fileStructure') ? `
+## File Structure
+
+### Project Organization
+Explain the reasoning behind the top-level directory structure.
+
+### Folder Structure
+Detail the purpose of key subdirectories within frontend and backend.
+
+### Key Files
+Describe the role of critical files (e.g., entry points, main configuration, routing).
+
+### Naming Conventions
+List specific naming conventions for files, variables, functions, classes, components, etc.
+
+### Configuration
+Explain key configuration files and their settings.
+` : ''}
+
+# FORMAT REQUIREMENTS
+- Create a well-structured Markdown document.
+- Use proper headings (# for main sections, ## for subsections, ### for sub-subsections, etc.).
+- **Write detailed paragraphs.** Avoid overly simplistic bullet points where narrative explanation is better.
+- Include tables for structured data where appropriate (e.g., API endpoints, requirements prioritization).
+- Add code examples (using \`\`\`language\\n...\\n\`\`\` blocks) and configuration snippets where helpful.
+- Make the documentation comprehensive, practical, and easy to understand.
+- Focus on clarity and actionability.
+
+# ⚠️ IMPORTANT NOTES ⚠️
+- **WRITE DETAILED PROSE:** Elaborate on each point. Do not just list items mentioned in the instructions; explain them thoroughly.
+- **PROVIDE EXAMPLES:** Include code snippets, config examples, API request/response examples where appropriate.
+- **EXPLAIN THE \'WHY\':** Briefly justify design decisions or technology choices where relevant.
+- **SUBSTANTIAL SECTIONS:** Ensure each section generated is substantial and provides real value, not just placeholders.
+- Use Mermaid syntax for diagrams where applicable (e.g., sequence diagrams).
+
+Output ONLY the markdown content of the requested documentation, nothing else.
+`;
+
+  return prompt;
+}
+
+// Helper Function to Parse Markdown into Sections
+function parseMarkdownSections(markdown: string): DocumentSection[] {
+  if (!markdown) return [];
+  
+  const sections: DocumentSection[] = [];
+  const lines = markdown.split('\n');
+  
+  let currentTitle = "General";
+  let currentContent = "";
+  let hasStartedContent = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+  
+    // Check for top-level headings (# Heading)
+    if (line.trim().startsWith('# ')) {
+      // If we already have content, save the previous section
+      if (hasStartedContent) {
+        sections.push({
+          title: currentTitle,
+          content: currentContent.trim()
+        });
+    }
+    
+      // Start a new section
+      currentTitle = line.trim().replace(/^#\s+/, '');
+      currentContent = "";
+      hasStartedContent = true;
+    } else {
+      // Add to current content (including the line)
+      currentContent += line + '\n';
+    }
   }
   
-  // Don't forget the last section
-  if (lastTitle) {
-    const sectionContent = markdown.substring(lastIndex).trim();
-    sections.push({ title: lastTitle, content: sectionContent });
-  }
-  
-  // If no sections were found, treat the entire document as one section
-  if (sections.length === 0 && markdown.trim().length > 0) {
-    sections.push({ title: 'Documentation', content: markdown });
+  // Add the last section if it exists
+  if (hasStartedContent) {
+    sections.push({
+      title: currentTitle,
+      content: currentContent.trim()
+    });
   }
   
   return sections;
@@ -159,6 +422,7 @@ function parseMarkdownSections(markdown: string): Array<{title: string, content:
 // Function to validate API key format (basic check)
 function validateApiKey(provider: string, apiKey: string): boolean {
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    console.error(`API key validation failed: Key is ${apiKey ? 'empty string' : 'null or undefined'}`);
     return false;
   }
   
@@ -166,353 +430,205 @@ function validateApiKey(provider: string, apiKey: string): boolean {
   
   switch (provider) {
     case 'openai':
-      return trimmedKey.startsWith('sk-');
+      const isValid = trimmedKey.startsWith('sk-');
+      if (!isValid) {
+        console.error('OpenAI key validation failed: Key does not start with "sk-"');
+      }
+      return isValid;
     case 'anthropic':
-      // Only check that Anthropic keys start with sk-
-      return trimmedKey.startsWith('sk-');
+      // Anthropic keys don't have a consistent prefix, just check it's not empty
+      return trimmedKey.length > 0;
     case 'gemini':
       // Gemini keys don't have a consistent prefix, just check it's not empty
       return trimmedKey.length > 0;
     default:
+      console.error(`API key validation failed: Unknown provider ${provider}`);
       return false;
   }
 }
 
-// Main API Handler
+// Define response type
+type ApiResponse = SuccessResponse | ErrorResponse;
+
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<SuccessResponse | ErrorResponse>
+  res: NextApiResponse
 ) {
-  // Method verification
+  // Only allow POST method
   if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Apply rate limiting
+  // Debug logging
+  console.log('Request body:', {
+    projectDetails: req.body?.projectDetails ? 'Present' : 'Missing',
+    selectedDocs: req.body?.selectedDocs ? 'Present' : 'Missing',
+    provider: req.body?.provider || 'Not specified',
+    apiKey: req.body?.apiKey ? 'Present' : 'Missing'
+  });
+
   try {
-    // Use IP address as the unique token for rate limiting
-    const token = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown-ip';
-    await limiter.check(res, 10, token); // Limit to 10 requests per interval (defined above)
-  } catch {
-    // The limiter.check function already handles sending the 429 response
-    return; // Stop execution if rate limited
-  }
-
-  // Declare provider variable here, allowing it to be accessible in catch block
-  let provider: GenerateDocsRequestBody['provider'] | undefined;
-  
-  // Record start time for performance tracking
-  const startTime = Date.now();
-  
-  try {
-    const { 
-      projectDetails, 
-      selectedDocs, 
-      apiKey, 
-      provider: reqProvider 
-    }: GenerateDocsRequestBody = req.body;
-    
-    // Assign the destructured provider to the outer scope variable
-    provider = reqProvider;
-
-    // Enhanced validation checks
-    if (!projectDetails) {
-      return res.status(400).json({ 
-        error: 'Project details are required', 
-        code: 'MISSING_PROJECT_DETAILS' 
-      });
+    // Rate limiting (5 requests per minute per IP)
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const key = `generate-docs-${ip}`;
+    const rateLimit = await rateLimiter.limit(key);
+    if (!rateLimit.success) {
+      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
     }
 
-    if (!projectDetails.projectName?.trim()) {
-      return res.status(400).json({ 
-        error: 'Project Name is required', 
-        code: 'MISSING_PROJECT_NAME' 
-      });
+    // Destructure and validate request body
+    const { projectDetails, selectedDocs, provider = 'openai', apiKey } = req.body;
+
+    if (!projectDetails || !selectedDocs) {
+      return res.status(400).json({ error: 'Missing required parameters' });
     }
 
-    if (!apiKey?.trim()) {
-      return res.status(400).json({ 
-        error: 'API Key is required', 
-        code: 'MISSING_API_KEY' 
-      });
-    }
+    // Track the actual provider and model we're using
+    let actualProvider = provider;
+    let modelUsed = '';
 
-    if (!provider || !['gemini', 'openai', 'anthropic'].includes(provider)) {
-      return res.status(400).json({ 
-        error: 'Invalid AI provider selected', 
-        code: 'INVALID_PROVIDER' 
-      });
-    }
-
-    if (!Object.values(selectedDocs).some(isSelected => isSelected)) {
-      return res.status(400).json({ 
-        error: 'Please select at least one document type', 
-        code: 'NO_DOCS_SELECTED' 
-      });
-    }
-
-    // Validate API key format
-    if (!validateApiKey(provider, apiKey)) {
-      return res.status(400).json({ 
-        error: `Invalid ${provider} API key format`, 
-        code: 'INVALID_API_KEY_FORMAT' 
-      });
-    }
-
-    const prompt = buildPrompt(projectDetails, selectedDocs);
-    let generatedText: string | null = null;
-
-    // console.log(`Received request. Provider: ${provider}, Project: ${projectDetails.projectName}`); // Removed for production
-
-    // Set a very generous timeout for all providers as requested
-    const requestTimeout = 600000; // 600 seconds (10 minutes)
-
-    switch (provider) {
-      case 'gemini':
-        try {
-          // Configure Gemini API with direct fetch implementation
-          const genAI = new GoogleGenerativeAI(apiKey);
-          
-          const systemInstruction = "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices.";
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
-          
-          console.log(`Using Gemini model: ${GEMINI_MODEL}`);
-          
-          const model = genAI.getGenerativeModel({ 
-            model: GEMINI_MODEL,
-            systemInstruction
-          });
-          
-          // Configure generation with appropriate settings
-          const result = await model.generateContent({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { 
-              temperature: 0.7,
-              maxOutputTokens: TOKEN_LIMITS.gemini,
-              topK: 40,
-              topP: 0.95
-            },
-            safetySettings
-          }, { signal: controller.signal });
-          
-          clearTimeout(timeoutId);
-          
-          const response = result.response;
-          generatedText = response.text();
-          
-          if (!generatedText) {
-            throw new Error("Gemini API returned no text in response");
-          }
-        } catch (err) { 
-          if (err instanceof Error && err.name === 'AbortError') {
-            throw new Error('Gemini API request timed out');
-          }
-          // Check if the error message indicates a quota/rate limit issue (common cause of 429)
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage.includes('429') || /quota|rate limit/i.test(errorMessage)) {
-             console.error(`Gemini API quota/rate limit error: ${errorMessage}`); // Log specific error server-side
-             // Return a 429 status code to the client
-             res.status(429).json({ error: `Gemini API Error: Rate limit or quota exceeded. Please check your Gemini plan/usage. (${errorMessage.substring(0, 100)}...)`, code: 'GEMINI_QUOTA_EXCEEDED' });
-             return; // Stop execution after sending response
-          }
-          // Throw other errors to be caught by the main handler
-          throw new Error(`Gemini API request failed: ${errorMessage}`);
-        }
-        break;
-
+    // Determine what model to use based on the provider
+    switch (provider.toLowerCase()) {
       case 'openai':
-        try {
-          const openai = new OpenAI({ apiKey });
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
-          
-          const completion = await openai.chat.completions.create({
-            model: OPENAI_MODEL,
-            messages: [
-              { role: "system", content: "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices." }, 
-              { role: "user", content: prompt }
-            ],
-            temperature: 0.7, 
-            max_tokens: TOKEN_LIMITS.openai,
-            top_p: 0.95,
-            frequency_penalty: 0.1,
-            presence_penalty: 0.1
-          }, { signal: controller.signal });
-          
-          clearTimeout(timeoutId);
-          
-          generatedText = completion.choices[0]?.message?.content || null;
-          
-          if (!generatedText) {
-            throw new Error("OpenAI API returned no content");
-          }
-        } catch (err) { 
-          if (err instanceof Error && err.name === 'AbortError') {
-            throw new Error('OpenAI API request timed out');
-          }
-          
-          let specificError = "";
-          if (err instanceof OpenAI.APIError) {
-            specificError = ` (Status: ${err.status}, Type: ${err.type}, Code: ${err.code})`;
-          }
-          
-          throw new Error(`OpenAI API request failed: ${err instanceof Error ? err.message : String(err)}${specificError}`); 
-        }
+        modelUsed = 'gpt-4o';
         break;
-
       case 'anthropic':
-        try {
-          // Simple API key check
-          const trimmedApiKey = apiKey.trim();
-          
-          if (!trimmedApiKey || !trimmedApiKey.startsWith('sk-')) {
-            throw new Error("Invalid Anthropic API key format: must start with 'sk-'");
-          }
-          
-          // Configure Anthropic client with proper timeout
-          const anthropic = new Anthropic({
-            apiKey: trimmedApiKey, 
-            timeout: requestTimeout,
-          });
-          
-          console.log(`Using Anthropic model: ${ANTHROPIC_MODEL}`);
-          
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
-          
-          // Make a single request - let the API validate the key and model availability
-          try {
-            const response = await anthropic.messages.create({
-              model: ANTHROPIC_MODEL,
-              max_tokens: TOKEN_LIMITS.anthropic,
-              temperature: 0.7,
-              system: "You are an expert technical writer generating Markdown project planning documents. Your output should be well-structured, comprehensive, and follow Markdown best practices.",
-              messages: [{ role: "user", content: prompt }],
-            }, { signal: controller.signal });
-            
-            clearTimeout(timeoutId);
-            
-            // Check response structure carefully - Anthropic returns content as an array
-            if (response && response.content && response.content.length > 0) {
-              const contentBlock = response.content[0];
-              if ('text' in contentBlock) {
-                generatedText = contentBlock.text;
-              } else {
-                throw new Error("Missing text in Anthropic API response");
-              }
-            } else {
-              throw new Error("Invalid response structure from Anthropic API");
-            }
-          } catch (error: any) {
-            // Enhanced error handling with more specific messages
-            if (error.status === 401) {
-              throw new Error("Authentication failed: Invalid Anthropic API key");
-            } else if (error.status === 400) {
-              throw new Error(`Anthropic API error: ${error.message || 'Bad request'}`); 
-            } else if (error.status === 403) {
-              throw new Error("Access denied: This API key doesn't have permission to use this Claude model");
-            } else if (error.status === 404) {
-              throw new Error("Model not found: The specified Claude model isn't available with this API key");
-            } else if (error.status === 429) {
-              throw new Error("Rate limit exceeded: Please try again later");
-            } else {
-              throw error; // Re-throw other errors
-            }
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            throw new Error('Anthropic API request timed out');
-          }
-          let specificError = "";
-          if (err instanceof Anthropic.APIError) {
-            // Use err.name instead of err.type
-            specificError = ` (Status: ${err.status}, Name: ${err.name})`;
-          }
-
-          throw new Error(`Anthropic API request failed: ${err instanceof Error ? err.message : String(err)}${specificError}`);
-        }
+        modelUsed = 'claude-3-sonnet-20240229';
         break;
-
-      default: 
-        return res.status(400).json({ 
-          error: 'Invalid AI provider specified', 
-          code: 'INVALID_PROVIDER' 
-        });
+      case 'gemini':
+        modelUsed = 'gemini-1.5-pro';
+        break;
+      default:
+        modelUsed = 'gpt-4o'; // Default to OpenAI
+        actualProvider = 'openai';
     }
 
-    if (generatedText) {
-      // Parse the markdown content into sections for better display
-      const sections = parseMarkdownSections(generatedText);
-      
-      // Record end time and calculate processing time
-      const endTime = Date.now();
-      const processingTimeMs = endTime - startTime;
-      
-      // Include the generated content and sections in the response
-      return res.status(200).json({
-        message: `Successfully generated documentation using ${provider}!`,
-        content: generatedText,
-        sections: sections,
-        // Add debug info to help troubleshoot any issues
-        debug: {
-          provider,
-          model: provider === 'gemini' ? GEMINI_MODEL : provider === 'openai' ? OPENAI_MODEL : ANTHROPIC_MODEL,
-          timestamp: new Date().toISOString(),
-          contentLength: generatedText.length,
-          processingTimeMs: processingTimeMs
+    const startTime = Date.now();
+    let generatedContent = '';
+    let apiError = null;
+
+    try {
+      if (provider === 'openai') {
+        // OpenAI implementation
+        if (!apiKey && !process.env.OPENAI_API_KEY) {
+          return res.status(400).json({ error: 'OpenAI API key is required' });
         }
-      }); 
-    } else {
-      throw new Error("AI generation completed but produced no output text");
+        
+        const openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
+        const prompt = buildPrompt(projectDetails, selectedDocs);
+        const response = await openai.chat.completions.create({
+          model: modelUsed,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: TOKEN_LIMITS.openai,
+        });
+        generatedContent = response.choices[0]?.message?.content || '';
+      } else if (provider === 'anthropic') {
+        // Anthropic implementation
+        if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
+          return res.status(400).json({ error: 'Anthropic API key is required' });
+        }
+        
+        const anthropic = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
+        const prompt = buildPrompt(projectDetails, selectedDocs);
+        const response = await anthropic.messages.create({
+          model: modelUsed,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: TOKEN_LIMITS.anthropic,
+        });
+        // Handle content blocks
+        generatedContent = response.content?.filter(block => 'text' in block).map(block => (block as any).text).join('') || '';
+      } else if (provider === 'gemini') {
+        // Google Gemini implementation
+        if (!apiKey && !process.env.GEMINI_API_KEY) {
+          return res.status(400).json({ error: 'Gemini API key is required' });
+        }
+        
+        const genAI = new GoogleGenerativeAI(apiKey || process.env.GEMINI_API_KEY || '');
+        const model = genAI.getGenerativeModel({ 
+          model: modelUsed,
+          safetySettings: safetySettings, // Use defined safety settings
+          generationConfig: { // Add generation config
+            temperature: 0.3,
+            maxOutputTokens: TOKEN_LIMITS.gemini
+          }
+        });
+        const prompt = buildPrompt(projectDetails, selectedDocs);
+        const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+        // Safely extract text
+        try {
+          generatedContent = result.response.text();
+        } catch (e) {
+           console.warn("Gemini response.text() failed, trying manual extraction.", e);
+           generatedContent = result.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
+        }
+      } else {
+        return res.status(400).json({ error: 'Unsupported provider' });
+      }
+    } catch (error) {
+      console.error(`Error generating content with ${provider}:`, error);
+      apiError = error; // Store the error to return details later
+      // Set a generic error message, specific details might be sensitive
+      generatedContent = ''; // Ensure content is empty on error
+      // Determine appropriate status code
+      let statusCode = 500;
+      const errorMessage = (error as Error).message?.toLowerCase();
+      if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
+        statusCode = 401;
+      } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
+        statusCode = 429;
+      } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
+         statusCode = 400;
+      }
+      // Do not return immediately, proceed to send response outside this block
+       return res.status(statusCode).json({ 
+         error: `Failed to generate documentation using ${provider}.`,
+         details: `API Error: ${(error as Error).message}` // Provide clearer error details
+       });
     }
 
-  } catch (error) {
-    // Log the error on the server side for debugging
-    console.error(`Error in /api/generate-docs (${provider || 'unknown'}) handler:`, error);
-    
-    // Handle API key related issues for all providers
-    if (error instanceof Error) {
-      const errorMessage = error.message;
-      
-      // Check for authentication/API key errors for any provider
-      if (
-        errorMessage.includes('API key') || 
-        errorMessage.includes('Authentication') ||
-        errorMessage.includes('authentication') ||
-        errorMessage.includes('auth') ||
-        errorMessage.includes('format') ||
-        errorMessage.includes('401') ||
-        errorMessage.includes('403') ||
-        errorMessage.includes('key') ||
-        errorMessage.includes('credential')
-      ) {
-        return res.status(400).json({
-          error: errorMessage,
-          code: 'INVALID_API_KEY_FORMAT'
-        });
-      }
-      
-      // Check for model not found errors
-      if (errorMessage.includes('model') && 
-          (errorMessage.includes('not found') || errorMessage.includes('404'))) {
-        return res.status(400).json({
-          error: errorMessage,
-          code: 'MODEL_NOT_FOUND'
-        });
-      }
+    // Check if content generation failed silently or returned empty
+    if (!generatedContent && !apiError) {
+      console.warn(`${provider} returned empty content.`);
+      return res.status(500).json({ 
+          error: 'AI provider returned empty content.',
+          details: 'The AI model generated an empty response. Try adjusting your project details or selected documents.' 
+      });
     }
-
-    // Generic error handling for all other cases
-    const message = error instanceof Error ? error.message : 'An unknown error occurred';
-    const errorCode = error instanceof Error && 'code' in error ? (error as any).code : 'INTERNAL_SERVER_ERROR';
     
+    // If an API error occurred previously, it would have already returned a response.
+    // This check is redundant due to the return inside the catch block above but kept for clarity.
+    // if (apiError) { 
+    //    // Response already sent in the catch block
+    //    return; 
+    // }
+
+    const processingTime = Date.now() - startTime;
+    const sections = parseContentToSections(generatedContent);
+
+    // Return success response
+    return res.status(200).json({
+      message: 'Documentation generated successfully',
+      content: generatedContent,
+      sections: sections,
+      debug: {
+        provider: actualProvider,
+        model: modelUsed,
+        timestamp: new Date().toISOString(),
+        contentLength: generatedContent.length,
+        processingTimeMs: processingTime,
+        sectionsCount: sections.length
+      }
+    });
+
+  } catch (outerError) {
+    // Catch any unexpected errors in the main handler logic
+    console.error('Unhandled error in generate-docs handler:', outerError);
     return res.status(500).json({ 
-      error: `Failed to generate documentation: ${message}`,
-      code: errorCode
+      error: 'An unexpected server error occurred.', 
+      details: (outerError as Error).message 
     });
   }
 }
+

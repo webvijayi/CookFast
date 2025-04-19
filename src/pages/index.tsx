@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, Fragment, useEffect } from 'react';
+import { useState, Fragment, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -19,6 +19,38 @@ import EnhancedForm from '@/components/EnhancedForm';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import FaqSection from '@/components/FaqSection';
 import GeneratorSection from '@/components/GeneratorSection';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import GenerationLogs from '@/components/GenerationLogs';
+import { AlertTriangleIcon } from "@/components/icons/AlertTriangleIcon";
+
+// Add a simple toast implementation since there's no toast component
+// This is a very basic implementation that will be used only for this file
+const toast = {
+  success: (message: string) => {
+    if (typeof window !== 'undefined') {
+      const toastElement = document.createElement('div');
+      toastElement.className = 'fixed bottom-4 right-4 bg-green-500 text-white p-3 rounded-lg shadow-lg z-50';
+      toastElement.textContent = message;
+      document.body.appendChild(toastElement);
+      setTimeout(() => {
+        toastElement.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+        setTimeout(() => document.body.removeChild(toastElement), 300);
+      }, 3000);
+    }
+  },
+  error: (message: string) => {
+    if (typeof window !== 'undefined') {
+      const toastElement = document.createElement('div');
+      toastElement.className = 'fixed bottom-4 right-4 bg-red-500 text-white p-3 rounded-lg shadow-lg z-50';
+      toastElement.textContent = message;
+      document.body.appendChild(toastElement);
+      setTimeout(() => {
+        toastElement.classList.add('opacity-0', 'transition-opacity', 'duration-300');
+        setTimeout(() => document.body.removeChild(toastElement), 300);
+      }, 3000);
+    }
+  }
+};
 
 // Dynamically import the MarkdownRenderer to avoid SSR issues
 const MarkdownRenderer = dynamic(() => import('../components/MarkdownRenderer'), {
@@ -169,14 +201,116 @@ const LinkIcon = ({ className = "h-5 w-5" }: SocialIconProps) => (
 
 // --- Section Components ---
 
+// Define a ResultsPanel component to display generated documentation
+const ResultsPanel = ({ 
+  documentSections, 
+  generatedMarkdown, 
+  onDownload,
+  onCopy,
+  onDownloadJSON,
+  onReset,
+  theme,
+  debugInfo
+}: { 
+  documentSections: DocumentSection[] | undefined,
+  generatedMarkdown: string | undefined,
+  onDownload: () => void,
+  onCopy: () => void,
+  onDownloadJSON: (debugInfo: any) => void,
+  onReset: () => void,
+  theme?: string,
+  debugInfo?: any
+}) => {
+  // Safety checks for missing data
+  const hasDocumentSections = documentSections && Array.isArray(documentSections) && documentSections.length > 0;
+  const hasGeneratedMarkdown = generatedMarkdown && generatedMarkdown.trim().length > 0;
+
+  return (
+    <div className="container max-w-6xl mx-auto px-4 py-12">
+      <div className="text-center mb-10">
+        <h2 className="text-3xl font-bold mb-4">Generated Documentation</h2>
+        <p className="text-muted-foreground">Your documentation has been successfully generated!</p>
+      </div>
+      
+      <div className="flex flex-col gap-6">
+        <div className="flex gap-4 justify-center">
+          <Button variant="outline" onClick={onDownload} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+            Download Markdown
+          </Button>
+          <Button variant="outline" onClick={onCopy} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+            Copy to Clipboard
+          </Button>
+          <Button variant="outline" onClick={() => onDownloadJSON(debugInfo)} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+            Download as JSON
+          </Button>
+          <Button variant="default" onClick={onReset}>
+            Generate New Documentation
+          </Button>
+        </div>
+        
+        {hasDocumentSections ? (
+          <Tabs defaultValue={documentSections[0].title} className="w-full">
+            <TabsList className="mb-6 w-full flex-wrap justify-start overflow-x-auto">
+              {documentSections.map((section) => (
+                <TabsTrigger key={section.title} value={section.title} className="px-4 py-2">
+                  {section.title}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            
+            {documentSections.map((section) => (
+              <TabsContent key={section.title} value={section.title} className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{section.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ClientOnly>
+                      <MarkdownRenderer content={section.content} isDarkMode={theme === 'dark'} />
+                    </ClientOnly>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            ))}
+          </Tabs>
+        ) : hasGeneratedMarkdown ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Complete Documentation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ClientOnly>
+                <MarkdownRenderer content={generatedMarkdown} isDarkMode={theme === 'dark'} />
+              </ClientOnly>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="text-center p-8 border rounded-lg">
+            <p className="text-amber-600 dark:text-amber-400">
+              <AlertTriangleIcon className="inline h-5 w-5 mr-1" />
+              No documentation sections found. Regenerate or try with different parameters.
+            </p>
+          </div>
+        )}
+        
+        {/* Generation logs display - moved outside tabs for visibility */}
+        <GenerationLogs />
+      </div>
+    </div>
+  );
+};
+
 // --- Main Page Component --- //
 export default function CookFastHome() {
-  // State for current panel, to show wizard UI flow
-  const [currentPanel, setCurrentPanel] = useState<PanelState>('intro');
-  const [isWaitingForCompletion, setIsWaitingForCompletion] = useState(false);
+  // UI State
+  const [activePanel, setActivePanel] = useState<PanelState>('intro');
+  const [workPhase, setWorkPhase] = useState<WorkPhase>('preparing');
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [estimatedTimeSeconds, setEstimatedTimeSeconds] = useState<number>(0);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [elapsedTimeSeconds, setElapsedTimeSeconds] = useState<number>(0);
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
-  const [workPhase, setWorkPhase] = useState<WorkPhase>('preparing');
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>('anthropic');
   const [isGenerating, setIsGenerating] = useState(false);
   const [sectionProgress, setSectionProgress] = useState(0);
@@ -216,13 +350,36 @@ export default function CookFastHome() {
   const [results, setResults] = useState<string | null>(null);
   const [generationStage, setGenerationStage] = useState('');
 
+  // Add state to store actual provider/model used from API response
+  const [actualProviderUsed, setActualProviderUsed] = useState<string | undefined>(undefined);
+  const [actualModelUsed, setActualModelUsed] = useState<string | undefined>(undefined);
+  const [debugInfo, setDebugInfo] = useState<any | undefined>(undefined);
+
   // Get current theme from context
   const { theme } = useTheme();
 
   // --- Handlers ---
   const addDebugLog = (event: string, details: unknown = {}) => {
     const timestamp = new Date().toISOString();
-    setDebugLogs(prevLogs => [...prevLogs, { timestamp, event, details }]);
+    const log = { timestamp, event, details };
+    
+    setDebugLogs(prevLogs => [...prevLogs, log]);
+    
+    // Store in session storage
+    if (typeof window !== 'undefined') {
+      try {
+        const existingLogs = JSON.parse(sessionStorage.getItem('cookfast_debug_logs') || '[]');
+        const updatedLogs = [...existingLogs, log];
+        sessionStorage.setItem('cookfast_debug_logs', JSON.stringify(updatedLogs));
+        
+        // Emit event for other components
+        document.dispatchEvent(new CustomEvent('cookfast:newLog', {
+          detail: { log }
+        }));
+      } catch (error) {
+        console.error('Error storing logs in session storage:', error);
+      }
+    }
   };
 
   const handleDetailChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setProjectDetails(prev => ({ ...prev, [e.target.name]: e.target.value })); addDebugLog('Project Details Changed', { [e.target.name]: e.target.value }); };
@@ -275,198 +432,174 @@ export default function CookFastHome() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    addDebugLog('Generation Started', { projectDetails, selectedDocs, provider: selectedProvider });
+  // Track elapsed time during document generation
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
     
-    // Check if at least one document is selected
-    const hasSelectedDoc = Object.values(selectedDocs).some(value => value);
-    if (!hasSelectedDoc) {
-      setError('Please select at least one document type to generate.');
-      addDebugLog('Generation Failed', { reason: 'No documents selected' });
-      return;
+    if (workPhase === 'generating' && generationStartTime) {
+      timer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - generationStartTime) / 1000);
+        setElapsedTimeSeconds(elapsed);
+      }, 1000);
+    } else if (workPhase === 'complete' || workPhase === 'error') {
+      setGenerationStartTime(null);
     }
-
-    // Validate required fields
-    if (!projectDetails.projectName || !projectDetails.projectGoal) {
-      setError('Project Name and Project Goal are required fields.');
-      addDebugLog('Generation Failed', { reason: 'Missing required fields', missingFields: { name: !projectDetails.projectName, goal: !projectDetails.projectGoal } });
-      return;
-    }
-
-    // Validate API key
-    if (!userApiKey.trim()) {
-      setError('API key is required.');
-      addDebugLog('Generation Failed', { reason: 'API key not provided' });
-      return;
-    }
-
-    // Start generation process
-    setIsLoading(true);
-    setError('');
-    setResults('');
-    setGeneratedMarkdown('');
     
-    // Set initial generation stage
-    setGenerationStage('Preparing request');
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [workPhase, generationStartTime]);
+  
+    const emitStatusUpdate = (stage: string, details?: string | object) => {
+    // Record the event in debug logs
+    addDebugLog(`Status Update: ${stage}`, typeof details === 'string' ? { message: details } : details);
     
-    try {
-      // Update status for better user feedback
-      setGenerationStage('Constructing prompt');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UI update
-      
-      addDebugLog('Sending Generation Request', { provider: selectedProvider, endpoint: '/api/generate-docs' });
-      
-      setGenerationStage(`Sending request to ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)} API`);
-      await new Promise(resolve => setTimeout(resolve, 800)); // Small delay for UI update
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 600000); // Match the 10-minute timeout
-      
-      setGenerationStage(`Generating documents with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}...`);
-      
-      // Function to update status during generation
-      const statusUpdateInterval = setInterval(() => {
-        // Rotate through status messages to show progress
-        setGenerationStage(prevStage => {
-          const stages = [
-            `Processing project details with ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`,
-            `Creating documentation structure`,
-            `Generating comprehensive documentation`,
-            `Finalizing ${Object.entries(selectedDocs).filter(([, value]) => value).length} document sections`,
-            `Applying markdown formatting`
-          ];
-          
-          const currentIndex = stages.indexOf(prevStage);
-          if (currentIndex === -1 || currentIndex === stages.length - 1) {
-            return stages[0];
-          } else {
-            return stages[currentIndex + 1];
-          }
-        });
-      }, 5000); // Update every 5 seconds
-      
-      const response = await fetch('/api/generate-docs', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ projectDetails, selectedDocs, provider: selectedProvider, apiKey: userApiKey }),
-        signal: controller.signal
-      });
-      
-      // Clear the status update interval
-      clearInterval(statusUpdateInterval);
-      clearTimeout(timeoutId);
-
-      setGenerationStage('Processing response');
-      addDebugLog('Generation Response Received', { status: response.status });
-      const data = await response.json();
-
-      if (response.ok) {
-        setGenerationStage('Generation complete!');
-        setResults(data.message);
-        setGeneratedMarkdown(data.content);
-
-        // Use server-parsed sections if available, otherwise parse client-side
-        if (data.sections && data.sections.length > 0) {
-          setDocumentSections(data.sections);
-          addDebugLog('Using server-parsed sections', { count: data.sections.length });
-        } else {
-          // Fallback to client-side parsing if the API didn't return sections
-          parseMarkdownSections(data.content);
-          addDebugLog('Falling back to client-side parsing');
+    // Calculate progress percentage based on stage
+    let progress = 0;
+    
+    switch (stage) {
+      case 'Validating API Key':
+        progress = 5;
+        break;
+      case 'Preparing to generate documents':
+        progress = 10;
+        break;
+      case 'Generating documents':
+        progress = 20; // This will be incremented during generation
+        break;
+      case 'Processing response':
+        progress = 90;
+        break;
+      case 'Generation complete!':
+        progress = 100;
+        break;
+      default:
+        // If we have details with a progress value, use that
+        if (typeof details === 'object' && details && 'progress' in details && typeof details.progress === 'number') {
+          progress = details.progress as number;
         }
-
-        // Add generation time to the result message if available
-        if (data.debug?.processingTimeMs) {
-          const processingTimeSeconds = Math.round(data.debug.processingTimeMs / 1000);
-          setResults(`${data.message} (Generated in ${processingTimeSeconds} seconds)`);
-        }
-        addDebugLog('Generation Successful', { messageLength: data.message.length, contentLength: data.content.length });
-      } else {
-        setGenerationStage('Generation failed');
-        setError(data.error || 'Failed to generate documentation. Please try again.');
-        addDebugLog('Generation Failed', { error: data.error, code: data.code });
-      }
-    } catch (error) {
-      console.error('Error generating documentation:', error);
-      setGenerationStage('Connection error');
-      setError('Error connecting to generation service. Please try again.');
-      addDebugLog('Generation Error', { error: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setIsLoading(false);
     }
+    
+    setGenerationProgress(progress);
+      
+    // Dispatch a custom event for status updates
+    const statusEvent = new CustomEvent('cookfast:generationStatus', { 
+      detail: { 
+        stage, 
+        details: typeof details === 'string' ? { message: details } : details,
+        estimatedTimeSeconds,
+        elapsedTimeSeconds,
+      } 
+    });
+    
+    document.dispatchEvent(statusEvent);
   };
 
-  // --- Utility Functions --- // (Keep utilities)
+  // Event handlers and document processing
+  useEffect(() => {
+    const handleGenerationSuccess = (e: Event) => {
+      try {
+        const customEvent = e as CustomEvent;
+        if (!customEvent.detail) {
+          console.error('Generation success event received but no detail data was provided');
+          setWorkPhase('error');
+          addDebugLog('Error: Missing Generation Success Data');
+          return;
+        }
+        
+        const { content, sections, debug } = customEvent.detail;
+
+        // Ensure we have at least content or sections
+        if (!content && (!sections || !Array.isArray(sections) || sections.length === 0)) {
+          console.error('Generation success event received but no content or sections were provided');
+          setWorkPhase('error');
+          addDebugLog('Error: Invalid Generation Success Data - No Content/Sections', { detail: customEvent.detail });
+          // Optionally set generatedMarkdown to an error message or leave empty
+          setGeneratedMarkdown('Error: Failed to generate valid documentation content.');
+          setDocumentSections([]);
+          return;
+        }
+        
+        // Update state directly with the data from the API response
+        // The API now provides the parsed sections, no need to re-parse here.
+        setDocumentSections(sections || []); // Use API sections or empty array
+        
+        // Set the full markdown content. If content is missing but sections exist, reconstruct it.
+        setGeneratedMarkdown(content || (sections || []).map((s: { title: string; content: string; }) => `# ${s.title}\n${s.content}`).join('\n\n'));
+        
+        // Update UI state
+        setActivePanel('results');
+        setWorkPhase('complete');
+        
+        // Store the actual provider/model used from the debug info
+        if (debug) {
+          setActualProviderUsed(debug.provider);
+          setActualModelUsed(debug.model);
+          setDebugInfo(debug);
+        }
+        
+        addDebugLog('Generation Complete (UI Update)', { 
+          contentLength: content?.length || 0,
+          sectionsCount: sections?.length || 0,
+          provider: debug?.provider,
+          model: debug?.model // Log the model as well
+        });
+      } catch (error) {
+        console.error('Error handling generation success event:', error);
+        addDebugLog('Generation Success Handler Error', { 
+          error: error instanceof Error ? error.message : String(error)
+        });
+        setWorkPhase('error');
+        // Provide error feedback in the UI
+        setGeneratedMarkdown('Error: An unexpected error occurred while processing the generated documentation.');
+        setDocumentSections([]);
+      }
+    };
+    
+    document.addEventListener('cookfast:generationSuccess', handleGenerationSuccess);
+    
+    return () => {
+      document.removeEventListener('cookfast:generationSuccess', handleGenerationSuccess);
+    };
+  }, []);
+
+  // --- Utility Functions --- //
   const formatLabel = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).replace(/ Doc$/, ' Document').trim();
 
-  // Parse markdown content into sections based on H1 headers
-  const parseMarkdownSections = (markdown: string): void => {
-    // Don't attempt to parse during SSR
-    if (typeof window === 'undefined') return;
-    
-    if (!markdown) {
-      setDocumentSections([]); // Clear sections if markdown is empty
-      return;
-    }
-    
-    const sections: Array<{title: string, content: string}> = [];
-    const regex = /^# (.+)$/gm;
-    let match;
-    let lastIndex = 0;
-    let lastTitle = '';
-    
-    // Find all matches
-    while ((match = regex.exec(markdown)) !== null) {
-      if (lastTitle) {
-        const sectionContent = markdown.substring(lastIndex, match.index).trim();
-        // Find the start of the content (skip the heading line itself)
-        const contentStartIndex = sectionContent.indexOf('\n');
-        const actualContent = contentStartIndex !== -1 ? sectionContent.substring(contentStartIndex + 1) : sectionContent; 
-        sections.push({ title: lastTitle, content: actualContent.trim() });
-      }
-      lastTitle = match[1];
-      lastIndex = match.index; // Store the index where the heading starts
-    }
-    
-    if (lastTitle) {
-      const sectionContent = markdown.substring(lastIndex).trim();
-      // Find the start of the content (skip the heading line itself)
-      const contentStartIndex = sectionContent.indexOf('\n');
-      const actualContent = contentStartIndex !== -1 ? sectionContent.substring(contentStartIndex + 1) : sectionContent;
-      sections.push({ title: lastTitle, content: actualContent.trim() });
-    }
-    
-    if (sections.length === 0 && markdown.trim().length > 0) {
-      sections.push({ title: 'Documentation', content: markdown });
-    }
-    
-    setDocumentSections(sections); // Update state directly
-  };
-  
   // Helper function to download content as a file
   const downloadContent = (content: string, filename: string) => {
     // Only run in browser
     if (typeof window === 'undefined') return;
     
     try {
-      const blob = new Blob([content], {type: 'text/markdown'});
+      const blob = new Blob([content], {type: 'text/markdown;charset=utf-8'}); // Ensure UTF-8 encoding
       const url = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
-      link.style.display = 'none';
+      link.style.display = 'none'; // Keep hidden
       document.body.appendChild(link);
+      
+      // Trigger download
       link.click();
       
-      // Clean up
+      // Clean up: Use setTimeout to allow download to initiate
       setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }, 100);
+        try {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          addDebugLog('Download Cleanup Successful', { filename });
+        } catch (cleanupError) {
+           console.error('Error during download cleanup:', cleanupError);
+           addDebugLog('Download Cleanup Error', { filename, error: String(cleanupError) });
+        }
+      }, 100); // 100ms delay 
+
     } catch (err) {
       console.error('Download failed:', err);
+      toast.error('Failed to prepare download.');
+      addDebugLog('Download Preparation Error', { filename, error: String(err) });
     }
   };
   
@@ -490,7 +623,7 @@ export default function CookFastHome() {
   };
   
   // Function to convert markdown content to structured JSON
-  const convertToJSON = (): ProjectJSON => {
+  const convertToJSON = (debugInfo: any): ProjectJSON => {
     // Create document structure based on sections
     const documentsObj: { [key: string]: { content: string, sections: DocumentSection[] } } = {};
     
@@ -534,25 +667,37 @@ export default function CookFastHome() {
       metadata: {
         generatedWith: 'CookFast',
         timestamp: new Date().toISOString(),
-        provider: selectedProvider,
-        model: selectedProvider === 'gemini' ? 'gemini-2.5-pro-exp-03-25' : 
-               selectedProvider === 'openai' ? 'gpt-4o' : 
-               'claude-3-7-sonnet-20250219'
+        // Use passed debugInfo if available, otherwise fallback to state/defaults
+        provider: debugInfo?.provider || actualProviderUsed || selectedProvider,
+        model: debugInfo?.model || actualModelUsed || 'unknown' 
       }
     };
   };
   
   // Helper function to download JSON content
-  const downloadJSON = () => {
-    if (!generatedMarkdown || typeof window === 'undefined') return;
+  const downloadJSON = (debugInfo: any) => {
+    // Log the debug info being used for download
+    console.log("Downloading JSON with debug info:", debugInfo);
+    addDebugLog('JSON Download Triggered', { debugInfo });
+
+    if (!generatedMarkdown && (!documentSections || documentSections.length === 0)) {
+      toast.error('No documentation content available to download as JSON.');
+      addDebugLog('JSON Download Aborted', { reason: 'No content' });
+      return;
+    }
+    
+    if (typeof window === 'undefined') return;
     
     try {
-      const jsonData = convertToJSON();
+      const jsonData = convertToJSON(debugInfo); // Pass debugInfo here
       const jsonString = JSON.stringify(jsonData, null, 2);
-      const filename = `${projectDetails.projectName.replace(/\s+/g, '-').toLowerCase() || 'project'}-docs.json`;
+      // Construct filename using provider from debugInfo or fallback
+      const providerName = (jsonData.metadata.provider || 'ai').replace(/\s+/g, '-').toLowerCase();
+      const baseFilename = (projectDetails.projectName?.trim() || providerName || 'documentation').replace(/\s+/g, '-').toLowerCase();
+      const filename = `${baseFilename}-docs.json`;
       
       // Create a blob from the JSON string
-      const blob = new Blob([jsonString], { type: 'application/json' });
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' }); // Ensure UTF-8
       const url = URL.createObjectURL(blob);
       
       // Create a temporary link and trigger download
@@ -565,13 +710,21 @@ export default function CookFastHome() {
       
       // Clean up
       setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }, 100);
+        try {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          addDebugLog('JSON Download Cleanup Successful', { filename });
+        } catch (cleanupError) {
+           console.error('Error during JSON download cleanup:', cleanupError);
+           addDebugLog('JSON Download Cleanup Error', { filename, error: String(cleanupError) });
+        }
+      }, 100); 
       
       addDebugLog('JSON Exported', { filename, byteSize: jsonString.length });
     } catch (err) {
       console.error('JSON export failed:', err);
+      toast.error('Failed to prepare JSON download.');
+      addDebugLog('JSON Download Error', { error: String(err) });
     }
   };
   
@@ -615,6 +768,61 @@ export default function CookFastHome() {
     }
   };
 
+  // Reset state to generate a new document
+  const handleReset = () => {
+    setGeneratedMarkdown('');
+    setResults(null);
+    setWorkPhase('preparing');
+    setActivePanel('intro');
+    setError(null);
+    addDebugLog('Reset Form', { timestamp: new Date().toISOString() });
+  };
+
+  // Handle document download
+  const handleDownload = () => {
+    console.log('[handleDownload] Triggered'); // Log start
+    addDebugLog('Download Markdown: Start');
+
+    // Ensure generatedMarkdown has content and projectDetails are available for filename
+    if (!generatedMarkdown || !generatedMarkdown.trim()) {
+        console.error('[handleDownload] Error: No content available.');
+        toast.error('No documentation content available to download.');
+        addDebugLog('Download Markdown: Aborted', { reason: 'No content' });
+        return;
+    }
+    console.log(`[handleDownload] Content length: ${generatedMarkdown.length}`);
+
+    // Use a default project name if necessary for the filename
+    const projectNameForFile = projectDetails?.projectName?.trim() || actualProviderUsed || 'documentation';
+    console.log(`[handleDownload] Using project name for file: ${projectNameForFile}`);
+    
+    // Construct filename
+    const baseFilename = projectNameForFile.replace(/\s+/g, '-').toLowerCase();
+    const filename = `${baseFilename}.md`;
+    console.log(`[handleDownload] Filename: ${filename}`);
+    
+    addDebugLog('Download Markdown: Initiated', { filename, length: generatedMarkdown.length });
+    downloadContent(generatedMarkdown, filename); // Call the utility
+    console.log('[handleDownload] downloadContent called'); // Log after calling utility
+  };
+
+  // Copy markdown to clipboard
+  const handleCopy = () => {
+    if (generatedMarkdown) {
+      navigator.clipboard.writeText(generatedMarkdown)
+        .then(() => {
+          toast.success('Copied to clipboard!');
+          addDebugLog('CopyToClipboard', { success: true, contentLength: generatedMarkdown.length });
+          emitStatusUpdate('success', { message: 'Copied to clipboard!' });
+        })
+        .catch(err => {
+          toast.error('Failed to copy to clipboard');
+          addDebugLog('CopyToClipboard', { success: false, error: err.message });
+          emitStatusUpdate('error', { message: 'Failed to copy to clipboard' });
+        });
+    }
+  };
+
   return (
     <Fragment>
       <Head>
@@ -650,7 +858,22 @@ export default function CookFastHome() {
       <FeaturesGrid />
       <HowItWorksSection />
       <FaqSection />
-      <GeneratorSection />
+      
+      {/* Show Generator or Results */}
+      {activePanel === 'results' && (generatedMarkdown || (documentSections && documentSections.length > 0)) ? (
+        <ResultsPanel 
+          documentSections={documentSections}
+          generatedMarkdown={generatedMarkdown}
+          onDownload={handleDownload}
+          onCopy={handleCopy}
+          onDownloadJSON={downloadJSON}
+          onReset={handleReset}
+          theme={theme}
+          debugInfo={debugInfo}
+        />
+      ) : (
+        <GeneratorSection />
+      )}
 
       {/* Copy Notification */}
       {showCopyNotification && (
