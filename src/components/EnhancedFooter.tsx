@@ -201,7 +201,14 @@ export default function EnhancedFooter() {
         <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
           <div className="flex flex-col md:flex-row md:justify-between items-center">
             <p className="text-gray-500 dark:text-gray-400 text-sm">
-              © {currentYear} Web Vijayi. All rights reserved.
+              © {currentYear} <a 
+                href="https://webvijayi.com" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent hover:opacity-80 transition-opacity font-semibold"
+              >
+                Web Vijayi
+              </a>. All rights reserved.
             </p>
             <div className="mt-4 md:mt-0 flex space-x-4 text-sm text-gray-500 dark:text-gray-400 items-center">
               <a href="https://github.com/webvijayi/CookFast/blob/main/LICENSE" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">License</a>

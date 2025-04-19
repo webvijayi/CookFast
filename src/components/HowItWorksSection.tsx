@@ -15,13 +15,13 @@ export default function HowItWorksSection() {
     {
       number: '02',
       title: 'Select Documentation Types',
-      description: 'Choose what documentation you need - requirements, architecture, guidelines, or all of the above.',
+      description: 'Choose what documentation you need - requirements, architecture, guidelines, or all we offer.',
       icon: '🔍',
     },
     {
       number: '03',
       title: 'Generate & Export',
-      description: 'Our AI generates comprehensive documentation that you can download as Markdown or JSON.',
+      description: 'The AI provider you selected generates comprehensive documentation that you can download as Markdown or JSON.',
       icon: '🚀',
     },
   ];

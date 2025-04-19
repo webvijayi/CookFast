@@ -832,7 +832,7 @@ export default function CookFastHome() {
         <meta name="author" content="Web Vijayi" />
         <meta property="og:title" content="CookFast | AI Documentation Generator" />
         <meta property="og:description" content="Generate project docs, templates, and guides with AI. Supports multiple AI providers." />
-        <meta property="og:image" content="https://cook-fast.webvijayi.com/og-image.png" />
+        <meta property="og:image" content="/cookfast%20og.png" />
         <meta property="og:url" content="https://cook-fast.webvijayi.com/" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />

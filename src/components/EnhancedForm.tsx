@@ -284,7 +284,7 @@ export default function EnhancedForm({
       </h2>
       
       <div className="space-y-8">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {(['gemini', 'openai', 'anthropic'] as AIProvider[]).map(provider => (
             <div 
               key={provider}
@@ -340,7 +340,7 @@ export default function EnhancedForm({
           <label htmlFor="apiKey" className="block text-sm font-medium">
             Your {selectedProvider.toUpperCase()} API Key <span className="text-red-500">*</span>
           </label>
-          <div className="flex">
+          <div className="flex flex-col sm:flex-row">
             <input
               type="password"
               id="apiKey"
@@ -348,7 +348,8 @@ export default function EnhancedForm({
               onChange={(e) => setUserApiKey(e.target.value)}
               className={`
                 ${getInputClasses(!!formErrors.apiKey)}
-                rounded-r-none
+                sm:rounded-r-none
+                rounded-r-md sm:rounded-b-none rounded-b-none
                 ${keyValidationStatus === 'valid' ? 'border-green-500 dark:border-green-600' : ''}
                 ${keyValidationStatus === 'invalid' ? 'border-red-500 dark:border-red-600' : ''}
               `}
@@ -360,6 +361,7 @@ export default function EnhancedForm({
               disabled={isValidatingKey || !userApiKey.trim()}
               className={`
                 px-4 py-3 rounded-r-md flex items-center justify-center
+                sm:rounded-l-none rounded-l-md rounded-t-none sm:rounded-t-md
                 transition-colors duration-200 font-medium text-white
                 ${isValidatingKey ? 'bg-gray-400 cursor-wait' :
                  keyValidationStatus === 'valid' ? 'bg-green-500 hover:bg-green-600' :
@@ -626,7 +628,7 @@ export default function EnhancedForm({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl mx-auto relative">
+    <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl mx-auto relative px-4 sm:px-0">
       {/* Progress bar */}
       <div className="mb-8">
         <div className="max-w-xl mx-auto">

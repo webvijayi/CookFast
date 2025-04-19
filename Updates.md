@@ -1,5 +1,74 @@
 # CookFast Updates
 
+## 2024-10-29 - Footer Link Cleanup
+
+### Development Steps
+1. Modified `src/components/EnhancedFooter.tsx`:
+   - Removed the duplicate "Report an Issue" link from the "Support Us" section to avoid redundancy, as it already exists in the "Quick Links" section.
+
+### Key Decisions
+- Streamlined the footer by removing duplicated links for a cleaner user interface.
+
+### Next Steps
+1. Verify footer links on different screen sizes.
+
+## 2024-10-29 - Enhanced FAQ Section and Support Links
+
+### Development Steps
+1. Modified `src/components/FaqSection.tsx`:
+   - Added new FAQs about the purpose of CookFast and why it was built
+   - Added FAQ about the meaning behind the CookFast name
+   - Added FAQs about customization and self-hosting options
+   - Improved existing FAQ answers with more detailed information
+   - Added GitHub repository links directly within FAQ answers
+   - Added a support question with GitHub issues link
+   - Reorganized FAQs in a more logical order
+
+2. Enhanced `src/components/EnhancedFooter.tsx`:
+   - Added Report an Issue link to the Support Us section
+   - Ensured Buy Me a Coffee link is prominently displayed
+
+### Key Decisions
+- Added direct links to GitHub repository in FAQ answers for easier navigation
+- Included the origin story of CookFast to help users understand the project's purpose
+- Clarified self-hosting instructions to promote project adoption
+- Maintained consistent branding and messaging across components
+
+### Next Steps
+1. Consider adding a dedicated "About Us" or "Our Story" section to the landing page
+2. Implement a contact form for non-GitHub users
+3. Add more social proof elements (testimonials, user stories)
+4. Consider adding project showcase examples created with CookFast
+
+## 2024-10-28 - Mobile Styling and Copy Text Fixes
+
+### Development Steps
+1. Modified `src/components/EnhancedForm.tsx`:
+   - Fixed responsive layout issues for mobile devices
+   - Improved grid system for provider selection cards (1 column on mobile, 2 on small screens, 3 on medium)
+   - Enhanced form input responsiveness with better stacking on small screens
+   - Added proper padding and margin for better mobile display
+
+2. Updated `src/components/HowItWorksSection.tsx`:
+   - Changed "all of the above" to "all we offer" in step 2 description
+   - Updated step 3 description to reference "The AI provider you selected" instead of "Our AI"
+
+3. Updated `next.config.js`:
+   - Added experimental configuration for staticPageGenerationTimeout
+   - Added serverComponentsExternalPackages array to fix HMR error
+   - Fixed the TypeError related to missing components property
+
+### Key Decisions
+- Used proper responsive design practices with Tailwind's mobile-first approach
+- Fixed copy text to properly reference the selected AI provider rather than "our AI"
+- Added necessary Next.js configuration to address HMR errors
+
+### Next Steps
+1. Test the mobile UI across various devices and screen sizes
+2. Consider adding more comprehensive error handling for API failures
+3. Review other components for potential responsive design issues
+4. Monitor HMR performance with the new configuration
+
 ## YYYY-MM-DD - Complete UI Redesign & Refactor
 
 - **Project Structure & Layout:**
@@ -375,3 +444,7 @@ These comprehensive fixes ensure that the form validation works correctly across
 - Implemented a custom `p` component in `react-markdown`'s `components` prop to handle block element rendering correctly.
 - Removed heuristic length check from `MarkdownRenderer`'s `useEffect`.
 - Added granular logging to `handleDownload` for better diagnostics.
+
+## 2024-07-26
+
+- Modified `src/components/EnhancedFooter.tsx`: Added hyperlink and gradient styling to the "Web Vijayi" text in the copyright section.
