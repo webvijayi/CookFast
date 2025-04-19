@@ -826,12 +826,12 @@ export default function CookFastHome() {
   return (
     <Fragment>
       <Head>
-        <title>CookFast | AI Documentation Generator</title>
-        <meta name="description" content="CookFast uses AI to auto-generate project documentation, templates, and guides. Supports OpenAI, Anthropic, and Gemini." />
-        <meta name="keywords" content="AI, documentation, templates, project generator, CookFast" />
+        <title>🍳🚀 CookFast | AI-Powered Project Documentation Generator - Free & Open Source</title>
+        <meta name="description" content="🔥 Generate comprehensive project docs in seconds! CookFast is a free, open-source tool that transforms your project ideas into detailed documentation using AI. Supports OpenAI, Anthropic, and Gemini. Start cooking up your project faster! 📝✨" />
+        <meta name="keywords" content="AI documentation generator, free documentation tool, project planning, technical documentation, OpenAI, Anthropic, Gemini, developer tool, markdown generator, project templates, open-source documentation, CookFast" />
         <meta name="author" content="Web Vijayi" />
-        <meta property="og:title" content="CookFast | AI Documentation Generator" />
-        <meta property="og:description" content="Generate project docs, templates, and guides with AI. Supports multiple AI providers." />
+        <meta property="og:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
+        <meta property="og:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers. Cook up your project faster! 📝✨" />
         <meta property="og:image" content="/cookfast%20og.png" />
         <meta property="og:url" content="https://cook-fast.webvijayi.com/" />
         <meta property="og:type" content="website" />
@@ -842,13 +842,15 @@ export default function CookFastHome() {
           {`{
             "@context": "https://schema.org",
             "@type": "WebSite",
-            "name": "CookFast",
+            "name": "CookFast 🍳🚀",
+            "description": "AI-powered documentation generator to instantly create comprehensive project plans, guidelines, and technical documentation.",
             "url": "https://cook-fast.webvijayi.com/",
             "potentialAction": {
               "@type": "SearchAction",
               "target": "https://cook-fast.webvijayi.com/?search={search_term_string}",
               "query-input": "required name=search_term_string"
-            }
+            },
+            "keywords": "AI documentation, project planning, free tool, open-source"
           }`}
         </script>
       </Head>
