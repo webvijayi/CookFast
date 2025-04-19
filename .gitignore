@@ -69,9 +69,9 @@ public/worker-*.js.map
 # Storybook
 storybook-static/
 
-# Sitemap
-public/sitemap*.xml
-public/robots.txt
+# Sitemap - allow these files to be tracked
+# public/sitemap*.xml
+# public/robots.txt
 
 # Editor directories and files
 .vscode/*
@@ -94,6 +94,7 @@ logs
 
 # WindSurf editor
 .windsurf/
+.windsurfrules
 
 # Local dev overrides
 *.local
