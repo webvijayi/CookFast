@@ -1,13 +1,14 @@
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import ThemeToggle from "@/components/ThemeToggle";
+import MainLayout from "@/components/layout/MainLayout";
 
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <ThemeProvider>
-      <Component {...pageProps} />
-      <ThemeToggle />
+      <MainLayout>
+        <Component {...pageProps} />
+      </MainLayout>
     </ThemeProvider>
   );
 }
