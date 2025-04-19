@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import Link from 'next/link';
 
 // FAQ section with common questions and answers
 export default function FaqSection() {
@@ -37,15 +39,34 @@ export default function FaqSection() {
     },
     {
       question: "How can I self-host CookFast?",
-      answer: "CookFast is completely open-source. You can self-host it by forking the repository at https://github.com/webvijayi/CookFast, following the installation instructions in the README, and deploying it to your preferred hosting platform. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server."
+      answer: <>
+        CookFast is completely open-source. You can self-host it by forking the <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>, following the installation instructions in the README, and deploying it to your preferred hosting platform. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
+      </>
     },
     {
       question: "How can I contribute to CookFast?",
-      answer: "We welcome contributions! You can contribute by reporting issues, suggesting features, or submitting pull requests on our GitHub repository at https://github.com/webvijayi/CookFast. Check the CONTRIBUTING.md file in the repo for guidelines."
+      answer: <>
+        We welcome contributions! You can contribute by reporting issues, suggesting features, or submitting pull requests on our <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>. Check the CONTRIBUTING.md file in the repo for guidelines.
+      </>
     },
     {
       question: "How much does CookFast cost?",
-      answer: "CookFast is completely free and open-source. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development, you can buy us a coffee at https://buymeacoffee.com/lokeshmotwani."
+      answer: <>
+        CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development:
+        <div className="mt-3 flex flex-wrap gap-3">
+          <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer">
+            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-10" />
+          </a>
+          <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              Star on GitHub
+            </Button>
+          </a>
+        </div>
+      </>
     },
     {
       question: "Can I export the generated documentation?",
@@ -53,7 +74,9 @@ export default function FaqSection() {
     },
     {
       question: "Where can I get support?",
-      answer: "You can get support by creating an issue on our GitHub repository at https://github.com/webvijayi/CookFast/issues or reaching out to us on Twitter @webvijayi. We're always happy to help!"
+      answer: <>
+        You can get support by creating an issue on our <a href="https://github.com/webvijayi/CookFast/issues" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a> or reaching out to us on Twitter <a href="https://twitter.com/webvijayi" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">@webvijayi</a>. We're always happy to help!
+      </>
     }
   ];
 

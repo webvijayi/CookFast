@@ -1,6 +1,6 @@
 # 🍳🚀 CookFast: AI-Powered Project Planning Documents 🛠️
 
-CookFast is a web application built with Next.js that helps you quickly generate preliminary project planning documents using various AI models. Provide your project details, select the documents you need, choose your preferred AI provider (Gemini, OpenAI, or Anthropic), enter your API key, and CookFast will generate the Markdown documentation for you.
+CookFast is an AI-powered tool that automatically generates comprehensive project documentation, templates, and development guides based on your project details. It helps developers quickly convert ideas into structured plans, reducing the initial project setup time significantly.
 
 ## ✨ Features
 
@@ -26,20 +26,29 @@ CookFast is a web application built with Next.js that helps you quickly generate
 ---
 ## 🧑‍🍳 Frequently Asked Questions
 
-1. **What is CookFast?**  
-   CookFast is an AI-powered tool that generates project planning documents in Markdown or JSON formats to help you start coding faster.
+### 1. What is CookFast?  
+CookFast is an AI-powered tool that automatically generates comprehensive project documentation, templates, and development guides based on your project details. It helps developers quickly convert ideas into structured plans, reducing the initial project setup time significantly.
 
-2. **How does it work?**  
-   Enter your project details, select the document types you need, choose an AI provider, and CookFast will generate comprehensive docs.
+### 2. Why was CookFast created?
+We built CookFast because we often had project ideas (like CookFast itself) and wanted to get started quickly, but planning would take considerable time. We needed a tool that could help us jumpstart projects with AI-powered documentation and planning, allowing us to focus more on implementation rather than initial documentation.
 
-3. **Which AI providers are supported?**  
-   Currently, CookFast supports Google Gemini, OpenAI, and Anthropic models.
+### 3. Why is it called 'CookFast'?
+The name 'CookFast' comes from the idea that it helps you 'cook up' (prepare) the basics of your idea quickly. Just as a chef prepares ingredients before cooking, CookFast helps prepare your project's foundation fast, so you can start building immediately.
 
-4. **What formats can I export?**  
-   You can download your generated docs as Markdown files or as a structured JSON file optimized for AI code assistants.
+### 4. Which AI providers does CookFast support?  
+Currently, CookFast supports multiple AI providers including OpenAI (GPT-4o), Anthropic (Claude 3.7 Sonnet), and Google (Gemini 2.5 Pro).
 
-5. **Is my API key saved?**  
-   No. API keys are validated client-side and never stored by CookFast.
+### 5. Do I need to provide my own API keys?
+Yes, you'll need to provide your own API key for the AI provider you choose to use. This ensures your data security and gives you control over which AI model processes your project information.
+
+### 6. What types of documentation can CookFast generate?
+CookFast can generate requirements documents, frontend guidelines, backend architecture, application flow, tech stack documentation, system prompts, and file structure documentation.
+
+### 7. Can I customize the documentation CookFast generates?
+Yes! You can customize the documentation by adjusting your project details and selecting specific document types. After generation, you can also download the documentation as Markdown or JSON and then modify it to suit your specific needs. We're also working on more customization options in future updates.
+
+### 8. Is my API key saved?  
+No. API keys are validated client-side and never stored by CookFast. They are sent directly to the chosen AI provider for the generation request only.
 
 ## Getting Started
 
@@ -53,7 +62,7 @@ CookFast is a web application built with Next.js that helps you quickly generate
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/webvijayi/CookFast.git # Replace with your actual repo URL if different
+    git clone https://github.com/webvijayi/CookFast.git
     cd CookFast
     ```
 
@@ -102,7 +111,7 @@ Found CookFast helpful? Here are a few ways you can support the project:
 
 ## 🚀 Deployment
 
-This application is configured for deployment on platforms like Netlify or Vercel which support Next.js applications with API routes.
+This application is configured for deployment on platforms like Netlify or Vercel which support Next.js applications with API routes. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
 
 ---
 

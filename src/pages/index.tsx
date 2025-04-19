@@ -139,8 +139,8 @@ type AIProvider = 'gemini' | 'openai' | 'anthropic';
 
 // --- Constants ---
 const APP_URL = "https://cook-fast.webvijayi.com/"; // Your app's URL
-const SHARE_TEXT = "CookFast - AI-Powered Project Planning Documents"; // Base text
-const SHARE_TITLE = "CookFast: AI Doc Generator"; // Used for email subject/web share title
+const SHARE_TEXT = "🍳🚀 CookFast - Free AI-Powered Project Documentation Generator. Transform your ideas into detailed docs in seconds!"; // Base text
+const SHARE_TITLE = "🍳🚀 CookFast: AI Doc Generator - Free & Open Source"; // Used for email subject/web share title
 const SHARE_TEXT_ENCODED = encodeURIComponent(SHARE_TEXT);
 const APP_URL_ENCODED = encodeURIComponent(APP_URL);
 const TWITTER_HANDLE = "webvijayi"; // Optional: Your Twitter handle
