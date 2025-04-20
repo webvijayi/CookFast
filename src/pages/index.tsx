@@ -845,9 +845,6 @@ export default function CookFastHome() {
         <meta property="og:url" content={SITE_URL} />
         <meta property="og:type" content="website" />
         
-        {/* Fallback OpenGraph Image */}
-        <meta property="og:image:url" content={OG_FALLBACK_URL} />
-        
         {/* Twitter Card Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@webvijayi" />
@@ -856,9 +853,6 @@ export default function CookFastHome() {
         <meta name="twitter:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers." />
         <meta name="twitter:image" content={OG_IMAGE_URL} />
         <meta name="twitter:image:alt" content="🍳🚀 CookFast - AI-Powered Documentation Generator" />
-        
-        {/* Fallback Twitter Image */}
-        <meta name="twitter:image:src" content={OG_FALLBACK_URL} />
         
         <script type="application/ld+json">
           {`{

@@ -6,6 +6,9 @@
 import React from "https://esm.sh/react@18.2.0";
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
+// Define the absolute URL for the fallback image
+const FALLBACK_IMAGE_URL = "https://cook-fast.webvijayi.com/cookfast%20og.png";
+
 export default async function handler(req: Request) {
   try {
     const url = new URL(req.url);
@@ -143,9 +146,33 @@ export default async function handler(req: Request) {
       },
     );
   } catch (e: any) {
-    console.error(`Error generating OG image: ${e.message}`);
-    return new Response(`Failed to generate image: ${e.message}`, {
-      status: 500,
-    });
+    console.error(`Error generating OG image: ${e.message}. Attempting to serve fallback.`);
+    
+    try {
+      // Fetch the static fallback image
+      const fallbackResponse = await fetch(FALLBACK_IMAGE_URL);
+
+      if (!fallbackResponse.ok) {
+        // Log if fallback fetch fails
+        console.error(`Failed to fetch fallback image: ${fallbackResponse.status} ${fallbackResponse.statusText}`);
+        // Return the original error response if fallback fails
+        return new Response(`Failed to generate dynamic image and failed to fetch fallback: ${e.message}`, { status: 500 });
+      }
+
+      // Return the fallback image content with appropriate headers
+      const imageBuffer = await fallbackResponse.arrayBuffer();
+      return new Response(imageBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': fallbackResponse.headers.get('Content-Type') || 'image/png', // Use actual content type or default to png
+          'Cache-Control': 'public, max-age=3600, s-maxage=3600' // Cache the fallback for an hour
+        },
+      });
+    } catch (fallbackError: any) {
+      // Log if there's an error during the fallback fetch process
+      console.error(`Error fetching fallback image: ${fallbackError.message}`);
+      // Return the original error response if fallback fetch throws an error
+      return new Response(`Failed to generate dynamic image and fallback fetch error: ${e.message}`, { status: 500 });
+    }
   }
 } 
