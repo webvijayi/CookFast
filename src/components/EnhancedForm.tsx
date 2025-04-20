@@ -192,6 +192,33 @@ export default function EnhancedForm({
   // Check if any document is selected
   const hasSelectedDoc = Object.values(selectedDocs).some(value => value);
 
+  // Handle document type selection with better logging
+  const handleDocumentSelection = (key: keyof DocumentSelection) => {
+    console.log(`Document selection changed: ${key}`, { 
+      previous: selectedDocs[key], 
+      new: !selectedDocs[key] 
+    });
+    
+    const newSelectedDocs = {
+      ...selectedDocs,
+      [key]: !selectedDocs[key]
+    };
+    
+    // Log the new state
+    console.log('Updated document selection state:', newSelectedDocs);
+    
+    setSelectedDocs(newSelectedDocs);
+    
+    // Clear the form error for docs if at least one is selected
+    if (Object.values(newSelectedDocs).some(Boolean) && formErrors.docs) {
+      setFormErrors(prev => {
+        const newErrors = {...prev};
+        delete newErrors.docs;
+        return newErrors;
+      });
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +231,7 @@ export default function EnhancedForm({
       projectName: projectDetails.projectName,
       projectGoal: projectDetails.projectGoal,
       hasApiKey: !!userApiKey.trim(),
+      selectedDocs: selectedDocs,
       selectedDocsCount: Object.values(selectedDocs).filter(Boolean).length
     });
     
@@ -221,7 +249,8 @@ export default function EnhancedForm({
 
     if (!hasSelectedDoc) {
       console.error("No documents selected");
-      setFormErrors({ docs: 'Please select at least one document type' });
+      setFormErrors({ ...formErrors, docs: 'Please select at least one document type' });
+      setCurrentStep(3); // Ensure we show the document selection step when this error occurs
       return;
     }
 
@@ -239,6 +268,9 @@ export default function EnhancedForm({
         setCurrentStep(2);
         return;
       }
+      
+      // One final log of the document selection before submission
+      console.log("Final document selection being submitted:", selectedDocs);
       
       await onSubmit(projectDetails, selectedDocs, selectedProvider, userApiKey);
     } catch (error) {
@@ -530,26 +562,26 @@ export default function EnhancedForm({
   const renderDocumentStep = () => (
     <div className={`transition-opacity duration-300 ${animateStepChange ? 'opacity-0' : 'opacity-100'}`}>
       <h2 className="text-2xl font-bold mb-8 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-        Select Documents
+        Select Document Types
       </h2>
       
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <p className="text-gray-600 dark:text-gray-300">
+          Select the types of documentation you need for your project:
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {Object.keys(selectedDocs).map((key) => (
             <div 
-              key={key}
+              key={key} 
               className={`
-                relative p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer
-                ${selectedDocs[key as keyof DocumentSelection]
-                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
-                  : 'border-gray-200 dark:border-gray-700'
+                relative p-4 rounded-lg cursor-pointer transition-all duration-200
+                ${selectedDocs[key as keyof DocumentSelection] 
+                  ? 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700'
+                  : 'bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }
               `}
-              onClick={() => {
-                const newSelectedDocs = { ...selectedDocs };
-                newSelectedDocs[key as keyof DocumentSelection] = !newSelectedDocs[key as keyof DocumentSelection];
-                setSelectedDocs(newSelectedDocs);
-              }}
+              onClick={() => handleDocumentSelection(key as keyof DocumentSelection)}
             >
               <div className="flex items-start mb-1">
                 <div className={`

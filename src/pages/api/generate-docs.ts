@@ -253,6 +253,9 @@ function buildPrompt(projectDetails: ProjectDetails, selectedDocs: DocumentSelec
     .filter(([_, isSelected]) => isSelected)
     .map(([docType, _]) => docType);
   
+  // Log selected document types for debugging
+  console.log('Building prompt with selected document types:', selectedDocTypes);
+  
   // Format the project details for the prompt
   const projectName = projectDetails.projectName?.trim() || 'Unnamed Project';
   const projectType = projectDetails.projectType?.trim() || 'Web Application';
@@ -262,6 +265,12 @@ function buildPrompt(projectDetails: ProjectDetails, selectedDocs: DocumentSelec
   
   // Count the number of document types requested to better guide the model
   const requestedDocCount = selectedDocTypes.length;
+  
+  // If no documents selected, use requirements as default
+  if (requestedDocCount === 0) {
+    console.warn('No document types selected, defaulting to requirements');
+    selectedDocTypes.push('requirements');
+  }
   
   // Build a comprehensive prompt
   const prompt = `
@@ -532,6 +541,17 @@ export default async function handler(
     apiKey: req.body?.apiKey ? 'Present' : 'Missing'
   });
 
+  // More detailed logging for selectedDocs
+  if (req.body?.selectedDocs) {
+    const selectedCount = Object.values(req.body.selectedDocs).filter(Boolean).length;
+    console.log('Selected document types:', {
+      count: selectedCount,
+      types: Object.entries(req.body.selectedDocs)
+        .filter(([_, value]) => Boolean(value))
+        .map(([key]) => key)
+    });
+  }
+
   try {
     // Rate limiting (5 requests per minute per IP)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -546,6 +566,16 @@ export default async function handler(
 
     if (!projectDetails || !selectedDocs) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Validate at least one document type is selected
+    const hasSelectedDoc = Object.values(selectedDocs).some(Boolean);
+    if (!hasSelectedDoc) {
+      console.warn('No document types selected in request');
+      return res.status(400).json({ 
+        error: 'No document types selected', 
+        details: 'Please select at least one document type to generate'
+      });
     }
 
     // Track the actual provider and model we're using

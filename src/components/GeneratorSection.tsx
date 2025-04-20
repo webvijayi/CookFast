@@ -188,7 +188,8 @@ export default function GeneratorSection() {
       projectDetails,
       projectName: projectDetails.projectName,
       projectGoal: projectDetails.projectGoal,
-      provider 
+      provider,
+      selectedDocs
     });
     
     // Reset generatedDocs when starting a new generation
@@ -212,6 +213,18 @@ export default function GeneratorSection() {
       return;
     }
     
+    // Validate at least one document type is selected
+    const hasSelectedDoc = Object.values(selectedDocs).some(Boolean);
+    if (!hasSelectedDoc) {
+      console.error("No document types selected");
+      setGenerationStage('Error: No document types selected');
+      addDebugLog('Validation Error', { 
+        error: 'No document types selected',
+        selectedDocs: selectedDocs
+      });
+      return;
+    }
+    
     // Set loading state and initial generation stage
     setIsLoading(true);
     setGenerationStage('Preparing to generate documents');
@@ -231,7 +244,8 @@ export default function GeneratorSection() {
       provider, 
       projectDetails: sanitizedProjectDetails,
       projectName: sanitizedProjectDetails.projectName,
-      projectGoal: sanitizedProjectDetails.projectGoal
+      projectGoal: sanitizedProjectDetails.projectGoal,
+      selectedDocs: selectedDocs
     });
     
     // Make direct API call instead of dispatching event
@@ -243,7 +257,7 @@ export default function GeneratorSection() {
         },
         body: JSON.stringify({
           projectDetails: sanitizedProjectDetails,
-          selectedDocs,
+          selectedDocs: selectedDocs,
           provider,
           apiKey
         })
