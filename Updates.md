@@ -1,3 +1,55 @@
+## 2025-05-24 - Dynamic OpenGraph Image Implementation
+
+### Development Steps
+1. Installed `@vercel/og` package for dynamic OpenGraph image generation:
+   - Added the capability to create visually appealing social media images on-the-fly
+   - Implemented a new API endpoint at `src/pages/api/og.tsx` for image generation
+
+2. Created dynamic image API endpoint with the following features:
+   - Generates a beautiful image featuring the 🍳🚀 CookFast logo text
+   - Supports both light and dark themes via query parameters
+   - Uses proper dimensions (1200×630) for optimal social media display
+   - Includes gradient backgrounds and subtle design elements
+   - Features customizable title and subtitle via query parameters
+
+3. Updated OpenGraph and Twitter Card meta tags in `src/pages/index.tsx`:
+   - Fixed both og:image and twitter:image URLs to use the new dynamic image endpoint
+   - Added missing twitter:title and twitter:description meta tags
+   - Organized meta tags into semantic groups with comments for better maintainability
+
+### Key Decisions
+- Used @vercel/og instead of static images to create more visually appealing social cards
+- Implemented a dynamic approach that can be extended for different themes or contexts
+- Created a consistent visual identity using the 🍳🚀 CookFast text logo
+- Ensured proper sizing and optimization for various social media platforms
+- Added proper Twitter meta tags following all platform best practices
+
+### Next Steps
+1. Test the dynamic OpenGraph images across different platforms (Twitter, Facebook, LinkedIn)
+2. Consider adding theme detection to automatically match the user's preference
+3. Explore adding custom fonts for more distinctive branding
+4. Investigate caching options to improve performance
+5. Add theme color meta tag for browsers that support it
+
+## 2025-05-23 - Twitter Card Image Tag Addition
+
+### Development Steps
+1. Modified `src/pages/index.tsx`:
+   - Added twitter:image meta tag with absolute URL to ensure proper Twitter card display
+   - Placed tag right after the twitter:creator tag in the document head
+   - Used absolute URL format (https://cook-fast.webvijayi.com/cookfast%20og.png) for better compatibility with Twitter's card validator
+
+### Key Decisions
+- Used absolute URL rather than relative path to ensure proper image recognition by Twitter card validator
+- Maintained consistency with existing og:image tag URL structure
+- Ensured proper URL encoding of spaces in the image filename
+
+### Next Steps
+1. Verify Twitter card functionality using Twitter's card validator tool
+2. Consider adding additional Twitter card meta tags if needed (twitter:card, etc.)
+3. Test social sharing on Twitter to confirm proper image display
+4. Consider adding different image sizes optimized for various social platforms
+
 # CookFast Updates
 
 ## 2025-05-22 - OpenGraph Image URL Fix for Social Media Sharing

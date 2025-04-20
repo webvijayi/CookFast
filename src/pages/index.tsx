@@ -827,14 +827,22 @@ export default function CookFastHome() {
         <meta name="description" content="🔥 Generate comprehensive project docs in seconds! CookFast is a free, open-source tool that transforms your project ideas into detailed documentation using AI. Supports OpenAI, Anthropic, and Gemini. Start cooking up your project faster! 📝✨" />
         <meta name="keywords" content="AI documentation generator, free documentation tool, project planning, technical documentation, OpenAI, Anthropic, Gemini, developer tool, markdown generator, project templates, open-source documentation, CookFast" />
         <meta name="author" content="Web Vijayi" />
+        
+        {/* OpenGraph Meta Tags */}
         <meta property="og:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
         <meta property="og:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers. Cook up your project faster! 📝✨" />
-        <meta property="og:image" content="https://cook-fast.webvijayi.com/cookfast%20og.png" />
+        <meta property="og:image" content="https://cook-fast.webvijayi.com/api/og" />
         <meta property="og:url" content="https://cook-fast.webvijayi.com/" />
         <meta property="og:type" content="website" />
+        
+        {/* Twitter Card Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@webvijayi" />
         <meta name="twitter:creator" content="@webvijayi" />
+        <meta name="twitter:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
+        <meta name="twitter:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers." />
+        <meta name="twitter:image" content="https://cook-fast.webvijayi.com/api/og" />
+        
         <script type="application/ld+json">
           {`{
             "@context": "https://schema.org",
