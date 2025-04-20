@@ -1,5 +1,180 @@
 # CookFast Updates
 
+## 2025-05-16 - AI Model Updates and Token Limit Enhancements
+
+### Development Steps
+1. Modified `src/pages/api/generate-docs.ts`:
+   - Updated OpenAI model from "gpt-4o" to "gpt-4.1" for advanced capabilities
+   - Adjusted token limits for all providers to match their latest specifications:
+     - OpenAI GPT-4.1: 32,768 output tokens (input limit: 1,000,000)
+     - Gemini 2.5 Pro: 65,536 output tokens (input limit: 1,048,576)
+     - Claude 3.7 Sonnet: 64,000 output tokens (input limit: 200,000)
+   - Optimized Anthropic Claude implementation to use non-streaming by default for better reliability
+   - Maintained thinking parameter for Claude to enhance reasoning capabilities
+   - Updated token usage tracking for more accurate reporting
+
+### Key Decisions
+- Upgraded to GPT-4.1 for significantly improved context handling (1M tokens) and output generation
+- Switched to non-streaming implementation for Anthropic Claude to reduce potential timeout issues
+- Preserved thinking parameter in Claude for enhanced reasoning
+- Maintained existing prompt engineering while leveraging higher token limits
+- Updated internal documentation and comments to reflect the model capabilities
+
+### Next Steps
+1. Monitor document generation quality with the new GPT-4.1 model
+2. Consider implementing model-specific prompt optimizations to leverage unique capabilities
+3. Update the FAQ section and documentation with the latest model information
+4. Add benchmark comparisons between models to help users choose the right provider
+5. Consider implementing a contextual token counter to optimize prompt sizes
+
+## 2025-05-15 - Typography Improvements in Hero Section
+
+### Development Steps
+1. Enhanced typography in `src/components/AnimatedHero.tsx`:
+   - Increased font sizes for document types and project types to text-xl (from text-lg/text-base)
+   - Applied italic styling to the "for" connector word for visual distinction
+   - Made font sizes consistent between mobile and desktop for better visual harmony
+   - Increased the "for" word font size to text-lg to match surrounding elements
+   - Maintained bold styling on document and project types while differentiating the connector
+
+### Key Decisions
+- Prioritized consistent typography across all device sizes for better visual harmony
+- Used italic styling for the "for" word to create visual distinction without disrupting flow
+- Made font sizes larger and consistent with the rest of the page copy
+- Maintained existing color scheme while enhancing readability through typography
+- Created a clear visual hierarchy with size and weight differences
+
+### Next Steps
+1. Monitor readability metrics and user feedback after these typography enhancements
+2. Consider extending similar typography improvements to other sections for consistency
+3. Evaluate if additional styling (like underlining or different weights) could further enhance readability
+4. Test different font sizes to find optimal balance between emphasis and space efficiency
+
+## 2025-05-15 - Anthropic Claude API Update to 3.7 Sonnet
+
+### Development Steps
+1. Modified `src/pages/api/generate-docs.ts`:
+   - Updated Claude model to the latest "claude-3-7-sonnet-20250219" version
+   - Increased token limit for Claude from previous limits to 24000 tokens
+   - Improved error handling during streaming with better fallback mechanism
+   - Added "thinking" parameter with budget_tokens to improve reasoning capabilities
+   - Enhanced token usage tracking for better monitoring and debugging
+   - Added more robust error handling and status code mapping for API errors
+
+### Key Decisions
+- Upgraded to Claude 3.7 Sonnet for better document generation quality and reasoning
+- Implemented streaming with fallback to non-streaming for reliability
+- Added comprehensive error handling with specific error messages for different failure scenarios
+- Maintained consistent response structure across all AI providers
+- Preserved token usage tracking for monitoring API consumption
+- Implemented graceful degradation with fallback mechanisms when API calls fail
+
+### Next Steps
+1. Monitor document quality improvements with the new Claude 3.7 Sonnet model
+2. Add Claude-specific prompt engineering to optimize for the model's strengths
+3. Implement cost tracking for different providers to compare efficiency
+4. Consider adding customizable temperature and other generation parameters
+5. Add example outputs to showcase improvements with the new model
+
+## 2025-04-19 - Hero Section Project Types Enhancement (Mobile Optimization)
+
+### Development Steps
+1. Enhanced `src/components/AnimatedHero.tsx` for better mobile experience:
+   - Now displaying full document names on all screen sizes instead of abbreviations
+   - Improved spacing and typography for mobile screens
+   - Added TypeScript typing for combinations array to prevent linter errors
+   - Increased container heights to accommodate full content on mobile
+   - Enhanced button styling with better touch targets for mobile users
+   - Improved overall spacing and readability on small screens
+
+### Key Decisions
+- Prioritized content clarity on mobile by showing complete document names
+- Improved accessibility with larger touch targets and better spacing
+- Added proper TypeScript typing to ensure code quality and prevent errors
+- Maintained the existing animation style while significantly improving mobile UI
+- Enhanced typography with appropriate text sizing and spacing for all devices
+- Created a more consistent cross-device experience that preserves all content
+
+### Next Steps
+1. Monitor mobile engagement metrics after these improvements
+2. Continue to test on various device sizes to ensure optimal experience
+3. Consider adding tooltips explaining document-project type relationships
+4. Evaluate performance impact of the enhanced mobile styling
+
+## 2025-04-19 - Hero Section Project Types Enhancement (Final Implementation)
+
+### Development Steps
+1. Completely refactored `src/components/AnimatedHero.tsx`:
+   - Implemented compatibility mapping between document types and project types
+   - Created a system that only shows sensible document-project type combinations
+   - Expanded to 9 document types with specific compatibility rules for each project type
+   - Added two new document types: "User Interface Design" and "Deployment Guide"
+   - Renamed "System Prompts" to "API Documentation" for better clarity
+   - Maintained responsive design with vertical stacking on mobile devices
+
+### Key Decisions
+- Created a more accurate representation of what documents apply to each project type
+- Mapped specific document types to relevant project types instead of showing all combinations
+- Added IDs to project types to facilitate compatibility mapping
+- Expanded the document types to provide a more comprehensive view of CookFast's capabilities
+- Structured the code with a clear compatibility system for better maintainability
+- Maintained the existing animation style and responsive design while improving content accuracy
+
+### Next Steps
+1. Monitor user engagement with the more realistic document-project combinations
+2. Consider adding tooltips explaining why certain document types are relevant for specific projects
+3. Evaluate if any additional document types should be included in the rotation
+4. Consider implementing a filtering mechanism in the documentation generator based on project type
+
+## 2025-04-18 - OpenAI Logo and Gemini Model Updates
+
+### Development Steps
+1. Modified `src/components/EnhancedForm.tsx`:
+   - Updated the OpenAI logo SVG with a new version that has a white background, making it visible in dark mode
+   - Ensured the SVG properly renders in both light and dark themes
+
+2. Updated Gemini API key validation:
+   - Modified `src/pages/api/validate-key.ts` to use "gemini-2.0-flash" model instead of "gemini-pro" (which no longer exists)
+   - Updated `src/pages/api/generate-docs.ts` to use "gemini-2.0-flash" model instead of "gemini-1.5-pro"
+
+3. Updated documentation:
+   - Modified `README.md` to reflect the current model being used (gemini-2.0-flash)
+   - Ensured consistency in FAQ section with updated model information
+
+### Key Decisions
+- Used an SVG with a white background for the OpenAI logo to ensure visibility in dark mode
+- Updated to Gemini 2.0 Flash model instead of older models that are no longer supported
+- Maintained documentation accuracy by updating README model references
+
+### Next Steps
+1. Monitor API responses to ensure the new Gemini model works correctly
+2. Consider adding fallback options if a model is not available
+3. Regularly review and update model references as providers change their API offerings
+
+## 2024-10-30 - FAQ Enhancement with Project Type Information
+
+### Development Steps
+1. Modified `src/components/FaqSection.tsx`:
+   - Added a new FAQ entry about project types CookFast can generate documentation for
+   - Placed it as the second question for prominence
+   - Listed all available project types: Web Applications, Websites, Mobile Apps, API Services, Libraries/Packages, and Desktop Applications
+
+2. Updated `README.md`:
+   - Added the new FAQ entry about project types to the existing FAQ section
+   - Updated the numbering of subsequent FAQ entries to maintain consistency
+   - Updated AI model information to reflect current versions
+
+### Key Decisions
+- Added specific information about supported project types to make it clearer to users what CookFast can do
+- Positioned the new FAQ early in the list to increase visibility
+- Maintained consistent information between the website FAQ and README
+
+### Next Steps
+1. Consider expanding the project type descriptions with more detailed information about how documentation differs by type
+2. Add examples of generated documentation for each project type
+3. Consider implementing document template options for different project types
+4. Update other documentation references to include project type information
+
 ## 2024-10-29 - FAQ Links Enhancement and Project Documentation
 
 ### Development Steps
@@ -509,3 +684,29 @@ These comprehensive fixes ensure that the form validation works correctly across
 ## 2024-07-26
 
 - Modified `src/components/EnhancedFooter.tsx`: Added hyperlink and gradient styling to the "Web Vijayi" text in the copyright section.
+
+## ${new Date().toISOString()} - Fix Anthropic API Call for Streaming and Model Update
+
+- **Modified `src/pages/api/generate-docs.ts`:**
+  - Updated Anthropic API call to use streaming (`stream: true`) to handle potentially long-running document generation tasks and prevent timeout errors.
+  - Implemented logic to accumulate streamed response chunks.
+  - Updated the Anthropic model to `claude-3-7-sonnet-20250219` as requested.
+  - Adjusted the `max_tokens` limit for Anthropic to 8192 to align with the model's capabilities and prevent errors.
+  - Added token usage details (input/output) to the debug information in the success response.
+
+## 2023-07-09
+- Enhanced document navigation with improved horizontal scrolling
+- Added navigation controls (left/right arrows) to tab navigation
+- Implemented keyboard accessibility for document tabs
+- Fixed issue with hidden tabs in horizontal scrolling
+- Added visual indicators for tab overflow
+- Improved tab interaction with smooth scrolling
+
+## 2023-07-08
+
+## 2025-05-01
+- Modified Anthropic API implementation to use streaming approach
+- Fixed error "Streaming is strongly recommended for operations that may take longer than 10 minutes" by implementing streaming API
+- Fixed error "temperature may only be set to 1 when thinking is enabled" by adjusting Anthropic API parameters
+- Created status update file documenting changes and future steps
+- Verified client component setup in EnhancedForm component

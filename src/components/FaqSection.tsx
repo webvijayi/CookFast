@@ -14,6 +14,10 @@ export default function FaqSection() {
       answer: "CookFast is an AI-powered tool that automatically generates comprehensive project documentation, templates, and development guides based on your project details. It helps developers quickly convert ideas into structured plans, reducing the initial project setup time significantly."
     },
     {
+      question: "What types of projects can CookFast generate documentation for?",
+      answer: "CookFast can generate documentation for a wide range of project types including Web Applications, Websites, Mobile Apps, API Services, Libraries/Packages, and Desktop Applications. The tool tailors the documentation based on the specific needs and requirements of each project type."
+    },
+    {
       question: "Why was CookFast created?",
       answer: "We built CookFast because we often had project ideas (like CookFast itself) and wanted to get started quickly, but planning would take considerable time. We needed a tool that could help us jumpstart projects with AI-powered documentation and planning, allowing us to focus more on implementation rather than initial documentation."
     },
@@ -23,7 +27,7 @@ export default function FaqSection() {
     },
     {
       question: "Which AI providers does CookFast support?",
-      answer: "CookFast supports multiple AI providers including OpenAI (GPT-4o), Anthropic (Claude 3.7 Sonnet), and Google (Gemini 2.5 Pro)."
+      answer: "CookFast supports multiple AI providers including OpenAI (GPT-4.1), Anthropic (Claude 3.7 Sonnet), and Google (Gemini 2.5 Pro). Each provider offers different capabilities: GPT-4.1 supports up to 1,000,000 tokens of context, Gemini 2.5 Pro allows up to 1,048,576 input tokens, and Claude 3.7 Sonnet has a 200,000-token context window."
     },
     {
       question: "Do I need to provide my own API keys?",

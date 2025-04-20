@@ -22,6 +22,7 @@ import GeneratorSection from '@/components/GeneratorSection';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GenerationLogs from '@/components/GenerationLogs';
 import { AlertTriangleIcon } from "@/components/icons/AlertTriangleIcon";
+import { DocumentTabs } from '@/components/ui/document-tabs';
 
 // Add a simple toast implementation since there's no toast component
 // This is a very basic implementation that will be used only for this file
@@ -201,7 +202,7 @@ const LinkIcon = ({ className = "h-5 w-5" }: SocialIconProps) => (
 
 // --- Section Components ---
 
-// Define a ResultsPanel component to display generated documentation
+// ResultsPanel component to display generated documentation
 const ResultsPanel = ({ 
   documentSections, 
   generatedMarkdown, 
@@ -249,30 +250,25 @@ const ResultsPanel = ({
         </div>
         
         {hasDocumentSections ? (
-          <Tabs defaultValue={documentSections[0].title} className="w-full">
-            <TabsList className="mb-6 w-full flex-wrap justify-start overflow-x-auto">
-              {documentSections.map((section) => (
-                <TabsTrigger key={section.title} value={section.title} className="px-4 py-2">
-                  {section.title}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            
-            {documentSections.map((section) => (
-              <TabsContent key={section.title} value={section.title} className="mt-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{section.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ClientOnly>
-                      <MarkdownRenderer content={section.content} isDarkMode={theme === 'dark'} />
-                    </ClientOnly>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            ))}
-          </Tabs>
+          <div className="w-full">
+            <DocumentTabs
+              sections={documentSections.map((section) => ({
+                title: section.title,
+                content: (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{section.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ClientOnly>
+                        <MarkdownRenderer content={section.content} isDarkMode={theme === 'dark'} />
+                      </ClientOnly>
+                    </CardContent>
+                  </Card>
+                ),
+              }))}
+            />
+          </div>
         ) : hasGeneratedMarkdown ? (
           <Card>
             <CardHeader>

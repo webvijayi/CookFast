@@ -6,12 +6,8 @@ const nextConfig = {
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
-  experimental: {
-    // Increase timeout for static page generation
-    staticPageGenerationTimeout: 180,
-    // Add external packages for server components
-    serverComponentsExternalPackages: [],
-  },
+  // Add external packages for server components
+  serverExternalPackages: [],
 };
 
 module.exports = nextConfig; 

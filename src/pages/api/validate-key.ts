@@ -98,7 +98,7 @@ async function validateGeminiKey(apiKey: string): Promise<void> {
     
     // Make a simple API call to validate the key
     // We'll get the list of models to validate the key without creating a chat
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     
     // Just attempt a simple operation that will fail with an invalid key
     // Using countTokens as it's a lightweight operation
