@@ -1,3 +1,34 @@
+## 2025-05-25 - Netlify Edge Function for OpenGraph Image Generation
+
+### Development Steps
+1. Identified issue with Vercel OG Image API not working on Netlify:
+   - Switched from Vercel's proprietary Edge Runtime (@vercel/og) to Netlify Edge Functions
+   - Implemented solution using og_edge, a Deno port of @vercel/og
+
+2. Created Netlify Edge Function infrastructure:
+   - Added `netlify/edge-functions/og.tsx` with og_edge implementation
+   - Updated `netlify.toml` to route `/api/og` to the Edge Function
+   - Added `deno.json` configuration for Deno and JSX support
+
+3. Maintained visual design consistency:
+   - Kept the same 🍳🚀 CookFast text logo in the dynamic image
+   - Preserved the gradient styling and overall visual identity
+   - Ensured proper dimensions (1200×630) for social media optimization
+
+### Key Decisions
+- Used Netlify Edge Functions instead of regular Netlify Functions for better performance
+- Adapted existing OG image design to work with the og_edge library
+- Maintained query parameter support for customization (theme, title, subtitle)
+- Used Deno's ESM imports to directly load dependencies without local installation
+- Kept the same visual design as the original implementation
+
+### Next Steps
+1. Test the Edge Function deployment on Netlify
+2. Verify OpenGraph image loading correctly in social media debuggers
+3. Consider implementing caching for better performance
+4. Monitor Edge Function execution for any potential issues
+5. Add automated tests for the OG image generation
+
 ## 2025-05-24 - Dynamic OpenGraph Image Implementation
 
 ### Development Steps

@@ -20,3 +20,8 @@
 # Plugin for essential Next.js features on Netlify
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Edge Function configuration for Open Graph image generation
+[[edge_functions]]
+  function = "og"
+  path = "/api/og"
