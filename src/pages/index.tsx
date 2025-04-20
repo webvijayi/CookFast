@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GenerationLogs from '@/components/GenerationLogs';
 import { AlertTriangleIcon } from "@/components/icons/AlertTriangleIcon";
 import { DocumentTabs } from '@/components/ui/document-tabs';
+import DocumentTypeSection from '@/components/DocumentTypeSection';
 
 // Add a simple toast implementation since there's no toast component
 // This is a very basic implementation that will be used only for this file
@@ -849,10 +850,103 @@ export default function CookFastHome() {
             "keywords": "AI documentation, project planning, free tool, open-source"
           }`}
         </script>
+        <script type="application/ld+json">
+          {`{
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Requirements Document",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "A comprehensive outline of project specifications, user stories, and functional requirements that clearly defines what the project needs to accomplish."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Frontend Guidelines",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Design standards, component structure, and UI/UX best practices to ensure consistency and maintainability across the frontend."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Backend Architecture",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Detailed architecture overview of APIs, services, data models, and system design to guide backend implementation."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 4,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Application Flow",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Sequence diagrams and flowcharts showing the interaction between components, services, and user journeys throughout the application."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 5,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "Tech Stack Overview",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Comprehensive documentation of technologies, frameworks, libraries, and tools with justifications for their selection."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 6,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "System Prompts",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "AI system prompts for interactive components, chatbots, or generative features within the application."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 7,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "File Structure",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Recommended project folder organization with rationale for the architecture to ensure maintainability and scalability."
+                }
+              },
+              {
+                "@type": "ListItem",
+                "position": 8,
+                "item": {
+                  "@type": "SoftwareApplication",
+                  "name": "PRD Documentation",
+                  "applicationCategory": "ProjectDocumentation",
+                  "description": "Comprehensive Product Requirements Documents with detailed user journeys, market analysis, and product strategy.",
+                  "offers": {
+                    "@type": "Offer",
+                    "availability": "https://schema.org/ComingSoon"
+                  }
+                }
+              }
+            ]
+          }`}
+        </script>
       </Head>
 
       {/* Main Content */}
       <AnimatedHero />
+      <DocumentTypeSection />
       <FeaturesGrid />
       <HowItWorksSection />
       <FaqSection />

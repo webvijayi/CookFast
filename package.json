@@ -22,6 +22,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cross-fetch": "^4.1.0",
+    "framer-motion": "^12.7.4",
     "lru-cache": "^11.1.0",
     "lucide-react": "^0.501.0",
     "mermaid": "^11.6.0",
