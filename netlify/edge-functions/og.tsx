@@ -1,5 +1,4 @@
 /// <reference types="react" />
-/// <reference path="./types.d.ts" />
 
 // Disable TypeScript checking for dynamic URL imports in Edge Functions
 // @ts-nocheck
