@@ -147,6 +147,11 @@ const SHARE_TEXT_ENCODED = encodeURIComponent(SHARE_TEXT);
 const APP_URL_ENCODED = encodeURIComponent(APP_URL);
 const TWITTER_HANDLE = "webvijayi"; // Optional: Your Twitter handle
 
+// Site URLs for OpenGraph
+const SITE_URL = "https://cook-fast.webvijayi.com";
+const OG_IMAGE_URL = `${SITE_URL}/api/og`;
+const OG_FALLBACK_URL = `${SITE_URL}/cookfast%20og.png`; // Use existing image as fallback
+
 // --- SVG Icons ---
 const SpinnerIcon = ({ className = "h-4 w-4 text-white" }: { className?: string }) => ( <svg className={cn("animate-spin", className)} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> );
 const GenerateIcon = ({ className = "h-5 w-5 mr-2" }: { className?: string }) => ( <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h8V3a1 1 0 112 0v1h1a2 2 0 012 2v11a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2h1V3a1 1 0 011-1zm10 7H5v6h10V9z" clipRule="evenodd" /></svg> );
@@ -827,13 +832,21 @@ export default function CookFastHome() {
         <meta name="description" content="🔥 Generate comprehensive project docs in seconds! CookFast is a free, open-source tool that transforms your project ideas into detailed documentation using AI. Supports OpenAI, Anthropic, and Gemini. Start cooking up your project faster! 📝✨" />
         <meta name="keywords" content="AI documentation generator, free documentation tool, project planning, technical documentation, OpenAI, Anthropic, Gemini, developer tool, markdown generator, project templates, open-source documentation, CookFast" />
         <meta name="author" content="Web Vijayi" />
+        <meta name="theme-color" content="#FB7A09" />
+        <link rel="preconnect" href={SITE_URL} />
         
         {/* OpenGraph Meta Tags */}
         <meta property="og:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
         <meta property="og:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers. Cook up your project faster! 📝✨" />
-        <meta property="og:image" content="https://cook-fast.webvijayi.com/api/og" />
-        <meta property="og:url" content="https://cook-fast.webvijayi.com/" />
+        <meta property="og:image" content={OG_IMAGE_URL} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="🍳🚀 CookFast - AI-Powered Documentation Generator" />
+        <meta property="og:url" content={SITE_URL} />
         <meta property="og:type" content="website" />
+        
+        {/* Fallback OpenGraph Image */}
+        <meta property="og:image:url" content={OG_FALLBACK_URL} />
         
         {/* Twitter Card Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
@@ -841,7 +854,11 @@ export default function CookFastHome() {
         <meta name="twitter:creator" content="@webvijayi" />
         <meta name="twitter:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
         <meta name="twitter:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers." />
-        <meta name="twitter:image" content="https://cook-fast.webvijayi.com/api/og" />
+        <meta name="twitter:image" content={OG_IMAGE_URL} />
+        <meta name="twitter:image:alt" content="🍳🚀 CookFast - AI-Powered Documentation Generator" />
+        
+        {/* Fallback Twitter Image */}
+        <meta name="twitter:image:src" content={OG_FALLBACK_URL} />
         
         <script type="application/ld+json">
           {`{

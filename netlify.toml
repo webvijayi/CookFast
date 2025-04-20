@@ -25,3 +25,10 @@
 [[edge_functions]]
   function = "og"
   path = "/api/og"
+
+# Fallback rules for OG images if Edge Function fails
+[[redirects]]
+  from = "/api/og-fallback"
+  to = "/cookfast-og-fallback.png"
+  status = 200
+  force = true

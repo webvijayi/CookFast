@@ -1,3 +1,9 @@
+/// <reference types="react" />
+/// <reference path="./types.d.ts" />
+
+// Disable TypeScript checking for dynamic URL imports in Edge Functions
+// @ts-nocheck
+
 import React from "https://esm.sh/react@18.2.0";
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
