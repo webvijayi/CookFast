@@ -4,6 +4,7 @@ import React from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import Link from 'next/link';
+import Script from 'next/script';
 
 // FAQ section with common questions and answers
 export default function FaqSection() {
@@ -43,34 +44,49 @@ export default function FaqSection() {
     },
     {
       question: "How can I self-host CookFast?",
-      answer: <>
-        CookFast is completely open-source. You can self-host it by forking the <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>, following the installation instructions in the README, and deploying it to your preferred hosting platform. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
-      </>
+      answer: {
+        jsx: (
+          <>
+            CookFast is completely open-source. You can self-host it by forking the <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>, following the installation instructions in the README, and deploying it to your preferred hosting platform. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
+          </>
+        ),
+        text: "CookFast is completely open-source. You can self-host it by forking the GitHub repository, following the installation instructions in the README, and deploying it to your preferred hosting platform. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server."
+      }
     },
     {
       question: "How can I contribute to CookFast?",
-      answer: <>
-        We welcome contributions! You can contribute by reporting issues, suggesting features, or submitting pull requests on our <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>. Check the CONTRIBUTING.md file in the repo for guidelines.
-      </>
+      answer: {
+        jsx: (
+          <>
+            We welcome contributions! You can contribute by reporting issues, suggesting features, or submitting pull requests on our <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a>. Check the CONTRIBUTING.md file in the repo for guidelines.
+          </>
+        ),
+        text: "We welcome contributions! You can contribute by reporting issues, suggesting features, or submitting pull requests on our GitHub repository. Check the CONTRIBUTING.md file in the repo for guidelines."
+      }
     },
     {
       question: "How much does CookFast cost?",
-      answer: <>
-        CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development:
-        <div className="mt-3 flex flex-wrap gap-2">
-          <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer">
-            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-8 sm:h-10" />
-          </a>
-          <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm" className="flex items-center gap-1 h-8 sm:h-10 text-xs sm:text-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-              Star on GitHub
-            </Button>
-          </a>
-        </div>
-      </>
+      answer: {
+        jsx: (
+          <>
+            CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development:
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer">
+                <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-8 sm:h-10" />
+              </a>
+              <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" className="flex items-center gap-1 h-8 sm:h-10 text-xs sm:text-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                  Star on GitHub
+                </Button>
+              </a>
+            </div>
+          </>
+        ),
+        text: "CookFast is completely free and open-source. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google)."
+      }
     },
     {
       question: "Can I export the generated documentation?",
@@ -78,14 +94,39 @@ export default function FaqSection() {
     },
     {
       question: "Where can I get support?",
-      answer: <>
-        You can get support by creating an issue on our <a href="https://github.com/webvijayi/CookFast/issues" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a> or reaching out to us on Twitter <a href="https://twitter.com/webvijayi" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">@webvijayi</a>. We're always happy to help!
-      </>
+      answer: {
+        jsx: (
+          <>
+            You can get support by creating an issue on our <a href="https://github.com/webvijayi/CookFast/issues" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">GitHub repository</a> or reaching out to us on Twitter <a href="https://twitter.com/webvijayi" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">@webvijayi</a>. We're always happy to help!
+          </>
+        ),
+        text: "You can get support by creating an issue on our GitHub repository or reaching out to us on Twitter @webvijayi. We're always happy to help!"
+      }
     }
   ];
 
+  // Create schema markup for FAQs
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": faqData.map(faq => ({
+      "@type": "Question",
+      "name": faq.question,
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": typeof faq.answer === 'object' ? faq.answer.text : faq.answer
+      }
+    }))
+  };
+
   return (
     <section id="faq" className="py-12 sm:py-16">
+      {/* Schema.org FAQPage markup */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
+
       <div className="container px-4 md:px-6">
         <div className="text-center mb-8 sm:mb-12">
           <h2 className="text-2xl sm:text-3xl font-semibold mb-3 sm:mb-4">Frequently Asked Questions</h2>
@@ -95,14 +136,14 @@ export default function FaqSection() {
         </div>
 
         <div className="max-w-3xl mx-auto">
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion type="single" collapsible className="w-full space-y-4">
             {faqData.map((faq, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger className="text-left text-sm sm:text-base pr-2 sm:pr-4">
+              <AccordionItem key={index} value={`item-${index}`} className="border border-border rounded-lg overflow-hidden mb-2">
+                <AccordionTrigger className="text-left text-base sm:text-lg pr-2 sm:pr-4 px-4 font-semibold">
                   <span className="mr-2 inline-block">💡</span> <span className="flex-1">{faq.question}</span>
                 </AccordionTrigger>
-                <AccordionContent className="text-xs sm:text-sm">
-                  {faq.answer}
+                <AccordionContent className="text-sm sm:text-base px-4">
+                  {typeof faq.answer === 'object' ? faq.answer.jsx : faq.answer}
                 </AccordionContent>
               </AccordionItem>
             ))}

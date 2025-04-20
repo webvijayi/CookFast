@@ -1,5 +1,71 @@
 # CookFast Updates
 
+## 2025-05-19 - Schema.org FAQ Markup Implementation for SEO
+
+### Development Steps
+1. Enhanced `src/components/FaqSection.tsx` with structured data:
+   - Added Schema.org FAQPage markup using JSON-LD
+   - Created a dual content structure for FAQ answers to maintain rich HTML while providing clean text for schema
+   - Added proper handling for JSX content vs string content in FAQ answers
+   - Implemented compliant Question and Answer schema structure
+   - Added script tag with type="application/ld+json" to inject structured data
+
+2. Improved FAQ styling and structure:
+   - Enhanced visual presentation with card-like styling
+   - Maintained rich HTML content with links and buttons in answers
+   - Ensured proper semantic structure for better accessibility
+   - Provided text alternatives for schema markup while preserving interactive elements for users
+
+### Key Decisions
+- Used JSON-LD format instead of Microdata or RDFa for better maintainability
+- Created a dual content structure with both JSX and plain text versions of FAQ answers
+- Maintained all interactive elements in the user interface while providing clean text for search engines
+- Ensured full Schema.org compliance for potential rich snippet display in search results
+- Prioritized both SEO optimization and user experience
+
+### Next Steps
+1. Test the schema implementation using Google's Rich Results Test tool
+2. Monitor search engine performance for potential rich snippet display
+3. Consider expanding schema markup to other sections of the website
+4. Evaluate potential for additional structured data types (Product, Organization, etc.)
+5. Monitor changes in Schema.org recommendations for ongoing optimization
+
+## 2025-05-18 - FAQ Section Font Size and Spacing Improvements
+
+### Development Steps
+1. Enhanced typography in `src/components/FaqSection.tsx`:
+   - Increased font sizes to be consistent with the rest of the website
+   - Changed question font size to text-base/text-lg with semibold weight
+   - Updated answer font size to text-sm/text-base for better readability
+   - Added border and rounded corners to FAQ items
+   - Implemented proper horizontal padding with px-4
+
+2. Improved spacing in FAQ component:
+   - Added space-y-4 to the accordion container for consistent vertical spacing
+   - Replaced default border-b with custom borders for each accordion item
+   - Added mb-2 to each accordion item for additional spacing
+   - Added overflow-hidden to accordion items to maintain rounded corners
+
+3. Enhanced base Accordion component in `src/components/ui/accordion.tsx`:
+   - Increased vertical padding to py-4/py-5 for more breathing room
+   - Enlarged chevron icon to h-5/w-5 for better visibility
+   - Improved content padding with consistent py-4/py-5 on both top and bottom
+   - Removed text-sm class from content to allow flexible sizing in implementation
+
+### Key Decisions
+- Prioritized visual consistency with the rest of the website's typography
+- Created card-like FAQ items with borders and rounded corners for better visual separation
+- Used larger touch targets and improved spacing for better usability
+- Maintained semibold font weight for questions to establish visual hierarchy
+- Removed cascading text size definitions to avoid conflicts
+
+### Next Steps
+1. Test the updated typography and spacing across different devices and screen sizes
+2. Consider adding hover effects to FAQ items for better interaction feedback
+3. Evaluate additional visual enhancements like subtle background colors
+4. Collect user feedback on the new spacing and typography
+5. Apply similar typography improvements to other text-heavy sections
+
 ## 2025-05-17 - FAQ Section Mobile Responsiveness Improvements
 
 ### Development Steps
