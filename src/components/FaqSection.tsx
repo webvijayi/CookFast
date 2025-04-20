@@ -57,13 +57,13 @@ export default function FaqSection() {
       question: "How much does CookFast cost?",
       answer: <>
         CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development:
-        <div className="mt-3 flex flex-wrap gap-3">
+        <div className="mt-3 flex flex-wrap gap-2">
           <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer">
-            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-10" />
+            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-8 sm:h-10" />
           </a>
           <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm" className="flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star">
+            <Button variant="outline" size="sm" className="flex items-center gap-1 h-8 sm:h-10 text-xs sm:text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-star">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Star on GitHub
@@ -85,11 +85,11 @@ export default function FaqSection() {
   ];
 
   return (
-    <section id="faq" className="py-16">
+    <section id="faq" className="py-12 sm:py-16">
       <div className="container px-4 md:px-6">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-semibold mb-4">Frequently Asked Questions</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
+        <div className="text-center mb-8 sm:mb-12">
+          <h2 className="text-2xl sm:text-3xl font-semibold mb-3 sm:mb-4">Frequently Asked Questions</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto text-sm sm:text-base">
             Get answers to common questions about CookFast.
           </p>
         </div>
@@ -98,10 +98,10 @@ export default function FaqSection() {
           <Accordion type="single" collapsible className="w-full">
             {faqData.map((faq, index) => (
               <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger className="text-left">
-                  <span className="mr-2">💡</span> {faq.question}
+                <AccordionTrigger className="text-left text-sm sm:text-base pr-2 sm:pr-4">
+                  <span className="mr-2 inline-block">💡</span> <span className="flex-1">{faq.question}</span>
                 </AccordionTrigger>
-                <AccordionContent>
+                <AccordionContent className="text-xs sm:text-sm">
                   {faq.answer}
                 </AccordionContent>
               </AccordionItem>
