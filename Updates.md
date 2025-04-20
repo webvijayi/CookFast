@@ -1,5 +1,27 @@
 # CookFast Updates
 
+## 2025-05-22 - OpenGraph Image URL Fix for Social Media Sharing
+
+### Development Steps
+1. Fixed OpenGraph image URLs in `src/pages/index.tsx`:
+   - Changed og:image URL from relative path (`/cookfast%20og.png`) to absolute URL (`https://cook-fast.webvijayi.com/cookfast%20og.png`)
+   - Ensured proper display of OpenGraph images when sharing on social media platforms
+
+2. Updated icon URLs in `public/site.webmanifest`:
+   - Changed icon paths from relative to absolute URLs
+   - Updated app name to "CookFast" in the manifest file
+
+### Key Decisions
+- Used absolute URLs for all images to ensure proper display when shared on social media
+- Maintained existing image files without changes to preserve visual consistency
+- Fixed the issue where social media platforms weren't displaying images when shared
+
+### Next Steps
+1. Test social media sharing on various platforms (Twitter, Facebook, LinkedIn)
+2. Consider implementing Open Graph image generation with @vercel/og for dynamic images
+3. Monitor social engagement metrics after the fix implementation
+4. Consider adding more image size variations for different platforms
+
 ## 2025-05-21 - Navigation and Section Order Reorganization
 
 ### Development Steps
