@@ -702,7 +702,7 @@ export default function GeneratorSection() {
                   
                   <div className="mt-4 text-sm text-green-600 dark:text-green-400">
                     <p>Generated using {generatedDocs.debug?.provider || 'AI'} in {((generatedDocs.debug?.processingTimeMs || 0) / 1000).toFixed(2)} seconds</p>
-                    <p className="mt-1">Content length: {generatedDocs.content?.length.toLocaleString()} characters • {generatedDocs.sections?.length || 0} sections</p>
+                    <p className="mt-1">Content length: {(generatedDocs.content?.length || 0).toLocaleString()} characters • {generatedDocs.sections?.length || 0} sections</p>
                   </div>
                 </div>
               )}
