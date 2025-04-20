@@ -1,3 +1,20 @@
+## 2025-04-21 - Fixed Netlify Edge Function Import Syntax Error
+
+### Development Steps
+1. Fixed syntax error in `netlify/edge-functions/og.tsx`:
+   - Identified and fixed the import statement using backticks that was causing the build failure
+   - Changed from using template literals (backticks) to regular string literals (quotes) in the React import
+   - Removed string interpolation in favor of direct version specification
+
+### Key Decisions
+- Maintained the same functionality while fixing the syntax issue
+- Used direct versioning instead of constant interpolation for better reliability
+
+### Next Steps
+1. Test the Edge Function deployment on Netlify
+2. Verify the OpenGraph image generation is working correctly
+3. Monitor Edge Function logs for any additional issues
+
 ## 2025-04-21 - Fixed Netlify Background Functions and Edge Functions
 
 ### Development Steps

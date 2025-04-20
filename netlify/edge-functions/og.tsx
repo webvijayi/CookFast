@@ -6,7 +6,8 @@
 // For production stability, pin to specific versions
 const REACT_VERSION = "18.2.0";
 
-import React from `https://esm.sh/react@${REACT_VERSION}?dts`;
+// We need to use dynamic import for ESM modules in Edge Functions
+import React from 'https://esm.sh/react@18.2.0?dts';
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
 // Define the absolute URL for the fallback image
