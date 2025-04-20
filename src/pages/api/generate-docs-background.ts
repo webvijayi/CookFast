@@ -524,6 +524,11 @@ function validateApiKey(provider: string, apiKey: string): boolean {
 // Define response type
 type ApiResponse = SuccessResponse | ErrorResponse;
 
+/**
+ * Background function for document generation with AI providers
+ * This implements Netlify's background function pattern and can run for up to 15 minutes
+ * Background functions should return a 202 immediately and process in the background
+ */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse

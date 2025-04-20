@@ -21,6 +21,11 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Configure paths for functions
+[functions]
+  # Next.js API routes are stored in src/pages/api, but Netlify expects them in netlify/functions
+  directory = "src/pages/api"
+
 # Edge Function configuration for Open Graph image generation
 [[edge_functions]]
   function = "og"

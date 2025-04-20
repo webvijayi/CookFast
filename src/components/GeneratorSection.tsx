@@ -248,9 +248,12 @@ export default function GeneratorSection() {
       selectedDocs: selectedDocs
     });
     
-    // Make direct API call instead of dispatching event
+    // Generate a unique request ID for this generation
+    const requestId = `request_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    
     try {
-      const response = await fetch('/api/generate-docs', {
+      // Make the initial API call using the background function endpoint
+      const response = await fetch('/api/generate-docs-background', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -259,11 +262,23 @@ export default function GeneratorSection() {
           projectDetails: sanitizedProjectDetails,
           selectedDocs: selectedDocs,
           provider,
-          apiKey
+          apiKey,
+          requestId // Include requestId to track this specific request
         })
       });
       
-      // Check for HTTP errors
+      // Check for initial response status
+      if (response.status === 202) {
+        // This is the expected status for background functions
+        setGenerationStage('Request accepted - Processing in background (this may take a few minutes)...');
+        addDebugLog('Background Processing Started', { requestId, status: response.status });
+        
+        // Start polling for completion
+        await pollForCompletion(requestId);
+        return;
+      }
+      
+      // Handle other response statuses
       if (!response.ok) {
         let errorDetails = `HTTP error! Status: ${response.status}`;
         try {
@@ -282,65 +297,165 @@ export default function GeneratorSection() {
         throw new Error(errorDetails);
       }
       
+      // If we got here, it means the function ran synchronously (not as a background function)
       const data = await response.json();
-      
-      // Safety checks and error handling
-      if (!data) {
-        throw new Error('Empty response received from API');
-      }
-      
-      // Ensure we have at least content or sections 
-      if (!data.content && (!data.sections || !Array.isArray(data.sections) || data.sections.length === 0)) {
-        console.warn('API response missing both content and sections', data);
-        
-        // Create an error message for the user
-        setGenerationStage('Error: Generated content is incomplete. Try again with different parameters.');
-        addDebugLog('Incomplete API Response', { 
-          hasContent: Boolean(data.content),
-          hasSections: Boolean(data.sections),
-          responseKeys: Object.keys(data)
-        });
-        throw new Error('API response missing both content and sections');
-      }
-      
-      // Store the generated docs directly
-      setGeneratedDocs(data);
-      
-      // Make sure documentSections are available for rendering
-      if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
-        console.log('Received sections:', data.sections.length);
-        addDebugLog('Documentation Sections', { 
-          count: data.sections.length,
-          titles: data.sections.map((s: DocumentSection) => s.title)
-        });
-      } else {
-        // If no sections found, log a warning but do not create a fallback
-        console.warn('No sections found in the API response.', data);
-        addDebugLog('Warning: No Sections Received', { 
-          hasContent: Boolean(data.content),
-          responseKeys: Object.keys(data)
-        });
-        // Ensure sections is an empty array if not provided or invalid
-        data.sections = []; 
-      }
-      
-      // Dispatch custom event with the generated data
-      const successEvent = new CustomEvent('cookfast:generationSuccess', {
-        detail: data
-      });
-      document.dispatchEvent(successEvent);
-      
-      setGenerationStage('Generation complete!');
+      handleSuccessfulResponse(data);
       
     } catch (error) {
       console.error('Error generating documentation:', error);
       setGenerationStage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       addDebugLog('Generation Error', { error: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 1000);
+      setIsLoading(false);
     }
+  };
+  
+  // Handle successful API response
+  const handleSuccessfulResponse = (data: any) => {
+    // Safety checks and error handling
+    if (!data) {
+      throw new Error('Empty response received from API');
+    }
+    
+    // Ensure we have at least content or sections 
+    if (!data.content && (!data.sections || !Array.isArray(data.sections) || data.sections.length === 0)) {
+      console.warn('API response missing both content and sections', data);
+      
+      // Create an error message for the user
+      setGenerationStage('Error: Generated content is incomplete. Try again with different parameters.');
+      addDebugLog('Incomplete API Response', { 
+        hasContent: Boolean(data.content),
+        hasSections: Boolean(data.sections),
+        responseKeys: Object.keys(data)
+      });
+      throw new Error('API response missing both content and sections');
+    }
+    
+    // Store the generated docs directly
+    setGeneratedDocs(data);
+    
+    // Make sure documentSections are available for rendering
+    if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
+      console.log('Received sections:', data.sections.length);
+      addDebugLog('Documentation Sections', { 
+        count: data.sections.length,
+        titles: data.sections.map((s: DocumentSection) => s.title)
+      });
+    } else {
+      // If no sections found, log a warning but do not create a fallback
+      console.warn('No sections found in the API response.', data);
+      addDebugLog('Warning: No Sections Received', { 
+        hasContent: Boolean(data.content),
+        responseKeys: Object.keys(data)
+      });
+      // Ensure sections is an empty array if not provided or invalid
+      data.sections = []; 
+    }
+    
+    // Dispatch custom event with the generated data
+    const successEvent = new CustomEvent('cookfast:generationSuccess', {
+      detail: data
+    });
+    document.dispatchEvent(successEvent);
+    
+    setGenerationStage('Generation complete!');
+    setIsLoading(false);
+  };
+  
+  // Poll for background function completion
+  const pollForCompletion = async (requestId: string) => {
+    try {
+      // Since Netlify's background functions on the free plan don't have a true status endpoint,
+      // we'll show a user-friendly message instead
+      setGenerationStage(`Your request has been accepted and is processing in the background.`);
+      
+      // Call our check-status endpoint once to get any helpful information
+      try {
+        const statusResponse = await fetch(`/api/check-status?requestId=${requestId}`);
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          // Update with more specific information if we have it
+          setGenerationStage(statusData.message || 'Request is being processed in the background.');
+        }
+      } catch (statusError) {
+        // Just log the error, but continue showing the background processing message
+        console.error('Error checking initial status:', statusError);
+        addDebugLog('Status Check Error', { error: statusError instanceof Error ? statusError.message : String(statusError) });
+      }
+      
+      // Display background processing notice
+      displayBackgroundProcessingNotice(requestId);
+      setIsLoading(false); // Stop loading spinner
+      
+      return true;
+    } catch (error) {
+      console.error('Error during background processing setup:', error);
+      setGenerationStage(`Error: ${error instanceof Error ? error.message : 'Unknown error during background processing'}`);
+      addDebugLog('Background Processing Error', { requestId, error: error instanceof Error ? error.message : String(error) });
+      setIsLoading(false);
+      return false;
+    }
+  };
+
+  // Display background processing notice to the user
+  const displayBackgroundProcessingNotice = (requestId: string) => {
+    // Create a user-friendly message for background processing
+    const backgroundMessage = (
+      <div className="mt-6 bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground">
+        <h3 className="font-semibold mb-2 flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          Background Processing in Progress
+        </h3>
+        <p className="mb-2">
+          Your document generation request has been accepted and is now processing in the background. 
+          <span className="font-medium">This may take several minutes</span> to complete due to the 
+          complexity of the AI generation process.
+        </p>
+        <p className="mb-2">
+          <strong>Request ID:</strong> <span className="font-mono text-xs bg-background px-1 py-0.5 rounded">{requestId}</span>
+        </p>
+        <p className="mb-3">
+          When the processing is complete, the results will be available on this page. You have two options:
+        </p>
+        <ol className="list-decimal pl-5 mb-2 space-y-1">
+          <li>Leave this page open and check back later</li>
+          <li>Refresh the page in a few minutes to see your results</li>
+        </ol>
+        <p className="text-xs text-muted-foreground mt-2">
+          Note: Because you're using the Netlify free plan, real-time progress updates are not available. 
+          This is normal behavior for background functions on the free tier.
+        </p>
+      </div>
+    );
+    
+    // Update UI to show the message - we store this differently to avoid type errors
+    const backgroundProcessingInfo = {
+      message: 'Background processing started',
+      content: backgroundMessage, // Store the JSX content directly
+      sections: [],
+      debug: {
+        provider: 'background',
+        model: 'background-processing',
+        timestamp: new Date().toISOString(),
+        contentLength: 0,
+        processingTimeMs: 0
+      },
+      isBackgroundProcessing: true, // Special flag for background processing
+      requestId: requestId
+    };
+    
+    // @ts-ignore - We're adding custom properties for background processing
+    setGeneratedDocs(backgroundProcessingInfo);
+    
+    // Dispatch event to notify parent components
+    const successEvent = new CustomEvent('cookfast:generationAccepted', {
+      detail: {
+        requestId,
+        backgroundProcessing: true
+      }
+    });
+    document.dispatchEvent(successEvent);
   };
 
   // Handler for API key validation
