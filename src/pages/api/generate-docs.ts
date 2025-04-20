@@ -91,7 +91,7 @@ const safetySettings = [
 // Token limits per provider - Updated with latest specifications
 const TOKEN_LIMITS = {
   gemini: 65536, // Gemini 2.5 Pro output token limit (input limit: 1,048,576)
-  openai: 32768, // GPT-4.1 output token limit (input limit: 1,000,000)
+  openai: 16384, // GPT-4.1 output token limit (input limit: 1,047,576)
   anthropic: 64000 // Claude 3.7 Sonnet output token limit (input limit: 200,000)
 };
 

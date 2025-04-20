@@ -1,3 +1,41 @@
+## 2025-04-21 - Fixed Netlify Background Functions and Edge Functions
+
+### Development Steps
+1. Modified `src/pages/api/generate-docs-background.ts` to implement proper Netlify background function pattern:
+   - Maintained the existing Gemini models (experimental/preview versions as required):
+     - PRIMARY: "gemini-2.5-pro-exp-03-25" 
+     - FALLBACK: "gemini-2.5-pro-preview-03-25"
+   - Improved background function implementation following Netlify best practices:
+     - Added proper 202 early response pattern with conditional check for headersSent
+     - Implemented proper timeout handling (14 minutes) to allow cleanup before Netlify's 15-minute limit
+     - Enhanced logging for background process completion and debugging
+     - Fixed response handling to always return an appropriate response for Netlify's runtime
+
+2. Enhanced `netlify/edge-functions/og.tsx` for better production reliability:
+   - Added proper caching with consistent cache-control headers (1h browser, 24h CDN)
+   - Improved error handling with consistent fallback strategy
+   - Added version pinning for external dependencies
+   - Added proper JSDoc comments to enhance maintainability
+   - Added debugging headers to facilitate troubleshooting
+
+3. Updated `src/pages/api/generate-docs.ts`:
+   - Fixed OpenAI max_tokens value from 32768 to 16384 to match GPT-4.1 specifications
+   - Updated the context window comments for accuracy (1,047,576 tokens)
+
+### Key Decisions
+- Maintained the specified Gemini experimental models while fixing the underlying function issues
+- Implemented proper Netlify background function pattern following documentation
+- Applied best practices for Edge Functions with appropriate caching strategies
+- Added consistent error handling and fallback mechanisms
+- Fixed the token limit configuration for OpenAI GPT-4.1
+
+### Next Steps
+1. Monitor Netlify function logs for successful Gemini API integrations
+2. Consider implementing a results storage mechanism (database or KV store) for background processes
+3. Add proper client-side polling for background process status
+4. Review and stress-test edge function performance
+5. Implement proper observability for both function types
+
 ## 2025-05-25 - Netlify Edge Function for OpenGraph Image Generation (Updated)
 
 ### Development Steps

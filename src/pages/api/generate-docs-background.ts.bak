@@ -74,8 +74,8 @@ interface ErrorResponse {
 
 // Constants - Updated with current model versions
 const GEMINI_MODELS = {
-  PRIMARY: "gemini-2.5-pro-exp-03-25",
-  FALLBACK: "gemini-2.5-pro-preview-03-25"
+  PRIMARY: "gemini-1.5-pro",
+  FALLBACK: "gemini-1.0-pro"
 };
 const OPENAI_MODEL = "gpt-4.1"; // Updated from gpt-4o to gpt-4.1
 const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Claude 3.7 Sonnet
@@ -754,170 +754,15 @@ The documentation MUST include ALL requested document types, and each type shoul
             generationConfig: {
               temperature: 0.3,
               maxOutputTokens: TOKEN_LIMITS.gemini
-            }
-          });
-          
-          // Properly implement Netlify background function pattern by returning 202 immediately
-          // This follows the Netlify docs recommendation for long-running processes
-          if (!res.headersSent) {
-            res.status(202).json({
-              message: 'Processing started',
-              requestId: generationId,
-              provider: 'gemini',
-              status: 'processing'
-            });
-          }
-          
-          // Execute the model call with proper timeout handling
-          // Using proper timeout handling but still allowing full 15-minute background execution
-          const result = await withTimeout(
-            model.generateContent({ 
-              contents: [{ role: 'user', parts: [{ text: prompt }] }] 
-            }),
-            // Set timeout to 14 minutes to allow for proper cleanup before Netlify's 15 minute limit
-            840000, // 14 minutes in ms
-            `Gemini API request timed out after 14 minutes`
-          );
-          
-          // Background processing - log progress
-          console.log(`Content generated with Gemini, now processing response for request ${generationId}`);
-          
-          
-          // Safely extract text
-          try {
-            generatedContent = result.response.text();
-          } catch (e) {
-            console.warn("Gemini response.text() failed, trying manual extraction.", e);
-            generatedContent = result.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
-          }
-          
-        } catch (primaryModelError) {
-          // If primary model fails, try fallback model
-          console.warn(`Primary Gemini model failed: ${(primaryModelError as Error).message}. Trying fallback model.`);
-          
-          // Background processing - log fallback attempt
-          console.log(`Primary Gemini model failed for request ${generationId}, trying fallback model: ${GEMINI_MODELS.FALLBACK}`);
-          console.error(`Error was: ${(primaryModelError as Error).message}`);
-          
-          
-          try {
-            modelUsed = GEMINI_MODELS.FALLBACK;
-            console.log(`Attempting with fallback Gemini model: ${modelUsed}`);
-            
-            const fallbackModel = genAI.getGenerativeModel({ 
-              model: modelUsed,
-              safetySettings: safetySettings,
-              generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: TOKEN_LIMITS.gemini
-              }
-            });
-            
-            // Background processing - log fallback progress
-            console.log(`Generating content with fallback Gemini model: ${modelUsed} for request ${generationId}`);
-            
-            
-            // Execute the fallback model with proper timeout handling
-            const fallbackResult = await withTimeout(
-              fallbackModel.generateContent({ 
-                contents: [{ role: 'user', parts: [{ text: prompt }] }] 
-              }),
-              // Set timeout to 14 minutes to allow for proper cleanup before Netlify's 15 minute limit
-              840000, // 14 minutes in ms
-              `Gemini fallback API request timed out after 14 minutes`
-            );
-            
-            // Background processing - log fallback progress
-            console.log(`Content generated with fallback Gemini model for request ${generationId}, now processing response`);
-            
-            
-            // Safely extract text
-            try {
-              generatedContent = fallbackResult.response.text();
-            } catch (e) {
-              console.warn("Gemini fallback response.text() failed, trying manual extraction.", e);
-              generatedContent = fallbackResult.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
-            }
-            
-          } catch (fallbackModelError) {
-            // If both models fail, throw the fallback error
-            console.error(`Fallback Gemini model also failed: ${(fallbackModelError as Error).message}`);
-            
-            // Background processing - log both models failed
-            console.error(`Both Gemini models failed for request ${generationId}. Error: ${(fallbackModelError as Error).message}`);
-            
-            
-            throw fallbackModelError;
-          }
-        }
-      } else {
-        return res.status(400).json({ error: 'Unsupported provider' });
-      }
-    } catch (error) {
-      console.error(`Error generating content with ${provider}:`, error);
-      apiError = error; // Store the error to return details later
-      // Set a generic error message, specific details might be sensitive
-      generatedContent = ''; // Ensure content is empty on error
-      // Determine appropriate status code
-      let statusCode = 500;
-      const errorMessage = (error as Error).message?.toLowerCase();
-      if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
-        statusCode = 401;
-      } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
-        statusCode = 429;
-      } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
-         statusCode = 400;
-      }
-      // Do not return immediately, proceed to send response outside this block
-       return res.status(statusCode).json({ 
-         error: `Failed to generate documentation using ${provider}.`,
-         details: `API Error: ${(error as Error).message}` // Provide clearer error details
-       });
     }
-
-    // Check if content generation failed silently or returned empty
-    if (!generatedContent && !apiError) {
-      console.warn(`${provider} returned empty content.`);
-      return res.status(500).json({ 
-          error: 'AI provider returned empty content.',
-          details: 'The AI model generated an empty response. Try adjusting your project details or selected documents.' 
-      });
-    }
+  } catch (fallbackModelError) {
+    // If both models fail, throw the fallback error
+    console.error(`Fallback Gemini model also failed: ${(fallbackModelError as Error).message}`);
     
-    // If an API error occurred previously, it would have already returned a response.
-    // This check is redundant due to the return inside the catch block above but kept for clarity.
-    // if (apiError) { 
-    //    // Response already sent in the catch block
-    //    return; 
-    // }
-
-    const processingTime = Date.now() - startTime;
-    const sections = parseContentToSections(generatedContent);
-
-    // For background functions in Netlify, we may have already sent a 202 response
-    // But Netlify recommends we still return a response even if headers sent (their runtime handles this correctly)
-    // See: https://docs.netlify.com/functions/background-functions/
+    // Background processing - log both models failed
+    console.error(`Both Gemini models failed for request ${generationId}. Error: ${(fallbackModelError as Error).message}`);
     
-    // Log the completion for monitoring in the Netlify function logs
-    console.log(`Background processing completed for ${generationId}. Response length: ${generatedContent.length} chars`);  
-    
-    // Store result metrics for debugging
-    console.log({
-      message: 'Documentation generated successfully',
-      requestId: generationId,
-      provider: actualProvider,
-      model: modelUsed,
-      processingTimeMs: processingTime,
-      sectionsCount: sections.length,
-      contentLength: generatedContent.length
-    });
-    
-    // Always return a response, Netlify's runtime handles this correctly for background functions
-    return res.status(200).json({
-      message: 'Documentation generated successfully',
-      content: generatedContent,
-      sections: sections,
-      debug: {
+    throw fallbackModelError;
         provider: actualProvider,
         model: modelUsed,
         timestamp: new Date().toISOString(),

@@ -3,12 +3,24 @@
 // Disable TypeScript checking for dynamic URL imports in Edge Functions
 // @ts-nocheck
 
-import React from "https://esm.sh/react@18.2.0";
+// For production stability, pin to specific versions
+const REACT_VERSION = "18.2.0";
+
+import React from `https://esm.sh/react@${REACT_VERSION}?dts`;
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
 // Define the absolute URL for the fallback image
 const FALLBACK_IMAGE_URL = "https://cook-fast.webvijayi.com/cookfast%20og.png";
 
+// Cache settings
+const CACHE_CONTROL_HEADER = "public, max-age=3600, s-maxage=86400"; // 1 hour browser cache, 24 hour CDN cache
+
+/**
+ * Netlify Edge Function handler for generating OpenGraph images
+ * This function generates dynamic OG images for social media with appropriate caching
+ * @param {Request} req - The incoming request object
+ * @returns {Response} - The generated image or fallback
+ */
 export default async function handler(req: Request) {
   try {
     const url = new URL(req.url);
@@ -23,7 +35,8 @@ export default async function handler(req: Request) {
     const textColor = theme === "dark" ? "#FFFFFF" : "#09090B";
     const accentColor = "#FB7A09"; // Orange accent color
     
-    return new ImageResponse(
+    // Generate the dynamic image with optimized response headers
+    const imageResponse = new ImageResponse(
       (
         <div
           style={{
@@ -145,6 +158,12 @@ export default async function handler(req: Request) {
         height: 630,
       },
     );
+    
+    // Add appropriate caching headers to the response
+    const response = new Response(imageResponse.body, imageResponse);
+    response.headers.set("Cache-Control", CACHE_CONTROL_HEADER);
+    
+    return response;
   } catch (e: any) {
     console.error(`Error generating OG image: ${e.message}. Attempting to serve fallback.`);
     
@@ -161,11 +180,13 @@ export default async function handler(req: Request) {
 
       // Return the fallback image content with appropriate headers
       const imageBuffer = await fallbackResponse.arrayBuffer();
+      // Return the fallback image with proper headers for production
       return new Response(imageBuffer, {
         status: 200,
         headers: {
           'Content-Type': fallbackResponse.headers.get('Content-Type') || 'image/png', // Use actual content type or default to png
-          'Cache-Control': 'public, max-age=3600, s-maxage=3600' // Cache the fallback for an hour
+          'Cache-Control': CACHE_CONTROL_HEADER, // Consistent caching policy
+          'X-Fallback-Image': 'true' // Debugging header to indicate fallback was used
         },
       });
     } catch (fallbackError: any) {
