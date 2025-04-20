@@ -17,10 +17,11 @@ const Logo = () => (
 
 // Navigation items
 const navItems = [
+  { name: 'Doc Types', href: '#document-types' },
   { name: 'Features', href: '#features' },
   { name: 'How It Works', href: '#how-it-works' },
-  { name: 'FAQ', href: '#faq' },
   { name: 'Generate', href: '#generate' },
+  { name: 'FAQ', href: '#faq' },
 ];
 
 const Header = () => {

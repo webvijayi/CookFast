@@ -949,7 +949,6 @@ export default function CookFastHome() {
       <DocumentTypeSection />
       <FeaturesGrid />
       <HowItWorksSection />
-      <FaqSection />
       
       {/* Show Generator or Results */}
       {activePanel === 'results' && (generatedMarkdown || (documentSections && documentSections.length > 0)) ? (
@@ -966,6 +965,8 @@ export default function CookFastHome() {
       ) : (
         <GeneratorSection />
       )}
+      
+      <FaqSection />
 
       {/* Copy Notification */}
       {showCopyNotification && (

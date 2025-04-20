@@ -1,5 +1,30 @@
 # CookFast Updates
 
+## 2025-05-21 - Navigation and Section Order Reorganization
+
+### Development Steps
+1. Reordered sections in `src/pages/index.tsx`:
+   - Moved the FAQ section below the Generator section
+   - Maintained proper component order to match the navigation flow
+   - Preserved conditional rendering of Generator/Results panel
+
+2. Updated navigation in `src/components/layout/Header.tsx`:
+   - Reorganized navigation items to match the actual section order on the page
+   - Updated order to: Doc Types, Features, How It Works, Generate, FAQ
+   - Ensured consistent user experience between navigation and content flow
+
+### Key Decisions
+- Prioritized logical content flow by ensuring navigation items match the actual section order
+- Placed Doc Types as the first menu item since it appears directly after the hero section
+- Moved FAQ to the end of the navigation to match its position at the bottom of the page
+- Maintained proper scrolling behavior with consistent IDs and hrefs
+
+### Next Steps
+1. Monitor user engagement with the reorganized navigation
+2. Consider adding visual indicators for the active section during scrolling
+3. Test navigation on various devices to ensure proper scroll behavior
+4. Consider adding smooth scroll offsets to account for the fixed header
+
 ## 2025-05-20 - Document Types Section Implementation
 
 ### Development Steps
@@ -17,7 +42,12 @@
    - Added schema.org structured data for document types to improve SEO
    - Implemented ItemList schema with SoftwareApplication type for each document
 
-3. Added package dependencies:
+3. Updated navigation:
+   - Added "Doc Types" menu item to the header navigation
+   - Placed it between Features and How It Works sections
+   - Ensured smooth scrolling to the document-types section
+
+4. Added package dependencies:
    - Installed framer-motion for animation capabilities
 
 ### Key Decisions
@@ -28,6 +58,7 @@
 - Used consistent color schemes and styling that match the existing design system
 - Ensured dark/light mode support with appropriate contrast and visual hierarchy
 - Utilized schema.org structured data for better search engine visibility and rich snippets
+- Selected "Doc Types" as the navigation label for clarity and brevity in the header menu
 
 ### Next Steps
 1. Monitor user engagement with the new document types section
