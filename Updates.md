@@ -763,3 +763,71 @@
 - Added detailed logging for better issue diagnosis
 
 ## 2023-11-16 13:45 - Documentation Generation Enhancements
+
+## 2024-09-21
+- Fixed 502 errors with Gemini API integration on Netlify by configuring background functions
+- Added `node_bundler = "esbuild"` configuration to Netlify functions
+- Configured `generate-docs` and `generate-docs-background` as background functions to prevent timeouts
+- Identified issue: Netlify free tier has a 10-second function timeout limitation which was causing Gemini API calls to fail
+
+## 2023-11-21 - Fixed 502 Bad Gateway Errors in AI Document Generation
+
+### Development Steps
+1. Updated `netlify.toml` to correctly configure all document generation functions as background functions:
+   - Added missing `background = true` to the generate-docs function configuration
+   - Ensured both function endpoints use the same Node.js version (18.x)
+
+2. Completely rewrote the background function implementation in `src/pages/api/generate-docs-background.ts`:
+   - Fixed improper response handling that was trying to send responses after the initial 202 response
+   - Added proper save mechanism to store generated content for later retrieval
+   - Implemented comprehensive error handling with proper error storage
+   - Added requestId tracking throughout the process for reliable retrieval
+
+3. Enhanced error handling and result storage:
+   - Added detailed error logs for various failure scenarios
+   - Ensured all results and errors are properly saved to the tmp directory
+   - Fixed the format of saved data to match what the check-status API expects
+
+### Key Decisions
+- Properly implemented Netlify's background function pattern with immediate 202 response
+- Added better logging throughout the background function for easier debugging
+- Used the saveGenerationResult utility properly to store AI generation results
+- Maintained error status information in the saved results for proper frontend error handling
+
+### Next Steps
+1. Continue monitoring for any remaining 502 errors on the live site
+2. Consider implementing a more robust storage solution than temporary files
+3. Add additional logging to the check-status API to better debug result retrieval
+4. Test the solution with high traffic to ensure it scales properly
+5. Consider adding a queue system to handle multiple requests more efficiently
+
+## 2023-11-20 - Fixed 502 Bad Gateway Errors in Document Generation API
+
+### Development Steps
+1. Updated `netlify.toml` to properly configure serverless functions:
+   - Explicitly set Node.js version to 18.x to support modern JavaScript features
+   - Added proper node_bundler settings for esbuild
+   - Fixed background function configuration for document generation endpoints
+
+2. Updated `src/pages/api/generate-docs.ts`:
+   - Added early response pattern to prevent timeouts in Netlify environment 
+   - Added environment detection to handle Netlify vs local development scenarios
+   - Improved error handling for better reporting to frontend clients
+
+3. Modified `src/utils/saveResult.ts` to support Netlify's filesystem:
+   - Added serverless environment detection
+   - Updated path handling to use '/tmp' directory in Netlify environment
+   - Enhanced logging for better debugging in production
+
+### Key Decisions
+- Used Node.js 18.x for Netlify functions to support modern JavaScript features
+- Implemented proper early response pattern for Netlify functions to prevent timeouts
+- Fixed temporary file storage to work with Netlify's read-only filesystem restrictions
+- Enhanced error logging to better diagnose issues in production
+
+### Next Steps
+1. Monitor Netlify function logs for successful document generation
+2. Consider implementing a more robust storage solution (like Netlify KV Store)
+3. Add proper client-side polling with exponential backoff for status checks
+4. Implement proper progress tracking for background document generation
+5. Add unit tests to validate function behavior in different environments
