@@ -9,13 +9,38 @@ import { MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'; // Im
 
 // For environments that have issues with the native fetch implementation
 import fetch from 'cross-fetch';
+import * as path from 'path';
+import * as fs from 'fs';
+
+// Make sure fetch is available globally
 global.fetch = fetch;
+
+// Determine if running in serverless environment
+const isServerless = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+
+// Use Node's native AbortController if available (Node.js 16+), otherwise use polyfill
+let AbortControllerPolyfill: any;
+try {
+  // This is only for type checking, the actual AbortController is from global scope
+  AbortControllerPolyfill = globalThis.AbortController;
+} catch (e) {
+  console.warn('Native AbortController not available, using polyfill');
+  // We'll use timeout-based cancellation instead
+  AbortControllerPolyfill = class {
+    signal = { aborted: false };
+    abort() {
+      this.signal.aborted = true;
+    }
+  };
+}
 
 // Add custom type for Gemini response part
 type GeminiPart = string | { text?: string; [key: string]: any };
 
-// Default timeout for API requests (30 seconds)
-const API_TIMEOUT_MS = 120000; // 2 minutes
+// Default timeout for API requests (carefully chosen for Netlify's environment)
+const API_TIMEOUT_MS = 25000; // 25 seconds - Gives time for retry before Netlify's 30s hard timeout
+const MAX_RETRIES = 3; // Number of retry attempts for API calls
+const RETRY_DELAY_MS = 2000; // Initial delay between retries (will be increased exponentially)
 
 // Interfaces
 interface ProjectDetails {
@@ -95,22 +120,91 @@ const TOKEN_LIMITS = {
   anthropic: 64000 // Claude 3.7 Sonnet output token limit (input limit: 200,000)
 };
 
-// Helper function to create a timeout promise
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
+// Helper function to wrap promises with a timeout and clean up to prevent socket hang up errors
+const withTimeout = <T>(
+  promise: Promise<T>, 
+  timeoutMs: number, 
+  errorMessage: string
+): Promise<T> => {
   let timeoutId: NodeJS.Timeout;
   
-  const timeoutPromise = new Promise<T>((_, reject) => {
+  // Create a timeout promise that will reject after the specified time
+  const timeoutPromise = new Promise<T>((_resolve, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error(errorMessage));
+      reject(new Error(`${errorMessage} (${timeoutMs}ms)`));
     }, timeoutMs);
   });
 
+  // Race the original promise against the timeout
   return Promise.race([
     promise,
     timeoutPromise
   ]).finally(() => {
+    // Always clear the timeout to prevent memory leaks
     clearTimeout(timeoutId);
   });
+};
+
+// Function to retry API calls with exponential backoff
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  options: {
+    retries?: number,
+    retryDelayMs?: number,
+    onRetry?: (attempt: number, error: Error) => void,
+    timeoutMs?: number,
+    errorMessage?: string
+  } = {}
+): Promise<T> => {
+  const { 
+    retries = MAX_RETRIES, 
+    retryDelayMs = RETRY_DELAY_MS,
+    onRetry,
+    timeoutMs = API_TIMEOUT_MS,
+    errorMessage = "Operation timed out"
+  } = options;
+  
+  let lastError: Error = new Error("No error information available");
+  
+  // Try the operation multiple times
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      // Use shorter timeouts for Netlify environment
+      const adjustedTimeout = Math.min(
+        timeoutMs, 
+        25000 // Cap at 25s for Netlify's 30s limit
+      );
+      
+      // Execute the function with a timeout
+      return await withTimeout(fn(), adjustedTimeout, errorMessage);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Check if this was the last attempt
+      if (attempt === retries) {
+        console.error(`Failed after ${attempt + 1} attempts. Error: ${lastError.message}`);
+        break;
+      }
+      
+      // Calculate backoff with jitter
+      const nextRetryMs = retryDelayMs * Math.pow(2, attempt) * (0.75 + Math.random() * 0.5);
+      console.log(`Attempt ${attempt + 1} failed with ${lastError.message}. Retrying in ${Math.round(nextRetryMs)}ms`);
+      
+      // Notify caller if they provided a callback
+      if (onRetry) {
+        try {
+          onRetry(attempt + 1, lastError);
+        } catch (callbackError) {
+          console.error("Error in retry callback:", callbackError);
+        }
+      }
+      
+      // Wait before the next attempt
+      await new Promise(resolve => setTimeout(resolve, nextRetryMs));
+    }
+  }
+  
+  throw lastError;
 };
 
 // Create a simple rate limiter
@@ -533,59 +627,124 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Only allow POST method
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Debug logging
-  console.log('Request body:', {
-    projectDetails: req.body?.projectDetails ? 'Present' : 'Missing',
-    selectedDocs: req.body?.selectedDocs ? 'Present' : 'Missing',
-    provider: req.body?.provider || 'Not specified',
-    apiKey: req.body?.apiKey ? 'Present' : 'Missing'
-  });
-
-  // More detailed logging for selectedDocs
-  if (req.body?.selectedDocs) {
-    const selectedCount = Object.values(req.body.selectedDocs).filter(Boolean).length;
-    console.log('Selected document types:', {
-      count: selectedCount,
-      types: Object.entries(req.body.selectedDocs)
-        .filter(([_, value]) => Boolean(value))
-        .map(([key]) => key)
-    });
-    
-    // Log selected document types to help with debugging
-    console.log('Building prompt with selected document types:', 
-      Object.entries(req.body.selectedDocs)
-        .filter(([_, value]) => Boolean(value))
-        .map(([key]) => key)
-    );
-  }
+  // Define generation ID early so it can be used in catch blocks
+  const generationId = req.body?.requestId || `request_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
   
-  // Get requestId for tracking
-  const { requestId } = req.body || {};
-  const generationId = requestId || `gen_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  
-  // For background functions in production, immediately return an accepted response
-  // This prevents the function from timing out when running as a background function
-  if (process.env.NETLIFY_DEV !== 'true' && process.env.NETLIFY_FUNCTIONS_BACKGROUND === 'true') {
-    // We're in production and running as a background function
-    console.log(`Processing request ${generationId} in background mode`);
-    
-    // Return 202 Accepted status for background processing
-    res.status(202).json({ 
-      status: 'accepted',
-      message: 'Request accepted and is being processed in the background',
-      requestId: generationId,
-      note: 'This request is being processed in the background and may take several minutes. Check back soon for your completed documents.'
-    });
-    
-    // Don't return - continue processing in the background
-  }
-
   try {
+    // Required for Netlify background functions - send immediate response
+    // Return 202 status immediately for background processing pattern
+    // See: https://docs.netlify.com/functions/background-functions/
+    res.setHeader('Content-Type', 'application/json');
+    
+    // Set CORS headers for browser compatibility
+    const allowedOrigins = [
+      'https://cook-fast.webvijayi.com',
+      'https://cookfast.netlify.app',
+      'http://localhost:3000'
+    ];
+    
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours cache for preflight
+
+    // Handle OPTIONS request for CORS preflight
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    
+    // Send a 202 Accepted response immediately
+    res.status(202).json({
+      message: 'Document generation started',
+      requestId: generationId,
+      estimatedTime: '1-2 minutes',
+      checkStatusUrl: `/api/check-status?requestId=${generationId}`
+    });
+  } catch (responseError) {
+    // If we somehow failed to send the response, log the error
+    console.error('Error sending initial response:', responseError);
+    // Try a simplified response as a last resort
+    try {
+      res.status(202).end();
+    } catch (finalError) {
+      console.error('Failed to send even basic response:', finalError);
+    }
+    
+    // Even if we fail to respond, continue processing to save error state
+  }
+  
+  // From this point on, we're running in the background
+  // The client already has a response, and we'll continue processing
+  try {
+    // Log start of background processing
+    console.log(`[BACKGROUND] Started processing for ${generationId}`);
+    
+    // Enforce HTTP method safety 
+    if (req.method !== 'POST') {
+      throw new Error('Method not allowed: Only POST method is supported');
+    }
+    
+    // Debug logging
+    console.log('Request body:', {
+      projectDetails: req.body?.projectDetails ? 'Present' : 'Missing',
+      selectedDocs: req.body?.selectedDocs ? 'Present' : 'Missing',
+      provider: req.body?.provider || 'Not specified',
+      apiKey: req.body?.apiKey ? 'Present' : 'Missing'
+    });
+    
+    // More detailed logging for selectedDocs
+    if (req.body?.selectedDocs) {
+      const selectedCount = Object.values(req.body.selectedDocs).filter(Boolean).length;
+      console.log('Selected document types:', {
+        count: selectedCount,
+        types: Object.entries(req.body.selectedDocs)
+          .filter(([_, value]) => Boolean(value))
+          .map(([key]) => key)
+      });
+      
+      // Log selected document types to help with debugging
+      console.log('Building prompt with selected document types:', 
+        Object.entries(req.body.selectedDocs)
+          .filter(([_, value]) => Boolean(value))
+          .map(([key]) => key)
+      );
+    }
+    
+    // Save an initial processing status to tmp so the status check can find it
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+      const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+      
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      
+      // Create initial status file
+      const initialStatus = {
+        status: 'processing',
+        message: 'Your document generation is now processing in the background',
+        debug: {
+          provider: req.body?.provider || 'unknown',
+          model: req.body?.provider || 'unknown',
+          timestamp: new Date().toISOString(),
+          stage: 'starting'
+        }
+      };
+      
+      fs.writeFileSync(path.join(tmpDir, `${generationId}.json`), JSON.stringify(initialStatus));
+    } catch (saveError) {
+      console.error(`Error saving initial status for ${generationId}:`, saveError);
+      // Continue processing even if saving fails
+    }
+    
     // Rate limiting (5 requests per minute per IP)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const key = `generate-docs-${ip}`;
@@ -593,29 +752,26 @@ export default async function handler(
     if (!rateLimit.success) {
       return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
     }
-
+    
     // Destructure and validate request body
     const { projectDetails, selectedDocs, provider = 'openai', apiKey } = req.body;
-
+    
     if (!projectDetails || !selectedDocs) {
-      return res.status(400).json({ error: 'Missing required parameters' });
+      throw new Error('Missing required parameters');
     }
-
+    
     // Validate at least one document type is selected
     const hasSelectedDoc = Object.values(selectedDocs).some(Boolean);
     if (!hasSelectedDoc) {
       console.warn('No document types selected in request');
-      return res.status(400).json({ 
-        error: 'No document types selected', 
-        details: 'Please select at least one document type to generate'
-      });
+      throw new Error('No document types selected');
     }
-
+    
     // Track the actual provider and model we're using
     let actualProvider = provider;
     let modelUsed = '';
     let finalUsage: Anthropic.Message['usage'] | undefined;
-
+    
     // Determine what model to use based on the provider
     switch (provider.toLowerCase()) {
       case 'openai':
@@ -631,27 +787,25 @@ export default async function handler(
         modelUsed = 'gpt-4o'; // Default to OpenAI
         actualProvider = 'openai';
     }
-
+    
     const startTime = Date.now();
     let generatedContent = '';
     let apiError = null;
-
+    
     try {
       // Background processing - log status for debugging
       console.log(`Preparing to generate with ${provider} using model ${modelUsed}`);
-      
       
       if (provider === 'openai') {
         // OpenAI implementation
         if (!apiKey && !process.env.OPENAI_API_KEY) {
           console.error(`OpenAI API key is required for request ${generationId}`);
           
-          return res.status(400).json({ error: 'OpenAI API key is required' });
+          throw new Error('OpenAI API key is required');
         }
         
         // Background processing - log progress
         console.log(`Building prompt and sending to OpenAI for request ${generationId}`);
-        
         
         const openai = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
         const prompt = buildPrompt(projectDetails, selectedDocs);
@@ -659,59 +813,98 @@ export default async function handler(
         // Background processing - log progress
         console.log(`Generating content with OpenAI for request ${generationId}`);
         
+        // Use withRetry with proper timeout to prevent socket hang up errors
+        const response = await withRetry(
+          () => openai.chat.completions.create({
+            model: modelUsed,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.3,
+            max_tokens: TOKEN_LIMITS.openai,
+          }),
+          {
+            timeoutMs: 25000, // shorter timeout for Netlify's 30s limit
+            retries: 3,
+            retryDelayMs: 2000,
+            errorMessage: `OpenAI API request timed out or failed - ${generationId}`
+          }
+        );
         
-        const response = await openai.chat.completions.create({
-          model: modelUsed,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          max_tokens: TOKEN_LIMITS.openai,
-        });
         generatedContent = response.choices[0]?.message?.content || '';
       } else if (provider === 'anthropic') {
         // Anthropic implementation
         if (!apiKey && !process.env.ANTHROPIC_API_KEY) {
-          return res.status(400).json({ error: 'Anthropic API key is required' });
+          throw new Error('Anthropic API key is required');
         }
         
         const anthropic = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
         const prompt = buildPrompt(projectDetails, selectedDocs);
-
+        
         // Create a system prompt for better context
         const systemPrompt = `You are a senior software architect specializing in creating detailed documentation.
 Your task is to generate comprehensive project documentation based on the user's request.
 Each document section should be complete with detailed information, not just headings or outlines.
 Format your response as markdown with proper headings (# for main sections, ## for subsections).
 The documentation MUST include ALL requested document types, and each type should be equally detailed.`;
-
+        
         // Validate prompt length against token limits before making the call
         // (Simple check - a more accurate tokenizer would be better)
         if (prompt.length / 3.5 > TOKEN_LIMITS.anthropic * 0.7) { // More accurate estimate, leave 30% buffer
           throw new Error(`Prompt exceeds estimated token limit for ${provider}. Please shorten the input.`);
         }
-
+        
         console.log(`Calling Anthropic (${modelUsed}) with prompt (length: ${prompt.length})...`);
-
-        // Use streaming approach for Anthropic to avoid timeout errors
+        
+        // Use streaming approach for Anthropic with proper timeout and retry handling
         try {
           let fullContent = '';
-          const streamResponse = await anthropic.messages.create({
-            model: modelUsed,
-            system: systemPrompt,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 1.0,
-            max_tokens: TOKEN_LIMITS.anthropic,
-            // Add thinking parameter to improve reasoning capabilities
-            thinking: {
-              type: "enabled",
-              budget_tokens: 2000
-            },
-            stream: true
-          });
-
+          
+          // Use withRetry with proper timeout to handle API request with robust error handling
+          const streamResponse = await withRetry(
+            () => anthropic.messages.create({
+              model: modelUsed,
+              system: systemPrompt,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 1.0,
+              max_tokens: TOKEN_LIMITS.anthropic,
+              // Add thinking parameter to improve reasoning capabilities
+              thinking: {
+                type: "enabled",
+                budget_tokens: 2000
+              },
+              stream: true
+            }),
+            {
+              timeoutMs: 25000, // shorter timeout for Netlify's 30s limit
+              retries: 2,
+              retryDelayMs: 3000,
+              errorMessage: `Anthropic API request timed out or failed - ${generationId}`
+            }
+          );
+          
           // Process stream to collect the response
           for await (const chunk of streamResponse) {
             if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
               fullContent += chunk.delta.text;
+              
+              // Update status file occasionally to show progress
+              try {
+                // Only update status occasionally to avoid excessive writes
+                if (Math.random() < 0.05) { // 5% chance per chunk = occasional updates
+                  const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+                  const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+                  const statusFilePath = path.join(tmpDir, `${generationId}.json`);
+                  
+                  if (fs.existsSync(statusFilePath)) {
+                    const currentStatus = JSON.parse(fs.readFileSync(statusFilePath, 'utf8'));
+                    currentStatus.debug.stage = 'generating_with_anthropic';
+                    currentStatus.debug.progress = fullContent.length; // Use content length as a progress indicator
+                    fs.writeFileSync(statusFilePath, JSON.stringify(currentStatus));
+                  }
+                }
+              } catch (statusError) {
+                console.error(`Error updating status for ${generationId}:`, statusError);
+                // Non-critical error, continue processing
+              }
             }
           }
           
@@ -723,155 +916,189 @@ The documentation MUST include ALL requested document types, and each type shoul
           console.error('Error in Anthropic API call:', error);
           throw error; // Re-throw to be caught by the outer catch block
         }
-
-      } else if (provider === 'gemini') {
-        // Google Gemini implementation with fallback
-        if (!apiKey && !process.env.GEMINI_API_KEY) {
-          console.error(`Gemini API key is required for request ${generationId}`);
+        
+        // Start timing
+        const startTime = Date.now();
+        
+        // Wrap API call in try-catch with timeout
+        let result;
+        try {
+          // Use the new withRetry function with proper timeout handling to prevent socket hang up errors
+          result = await withRetry(
+            () => model.generateContent({ 
+              contents: [{ role: 'user', parts: [{ text: prompt }] }] 
+            }),
+            {
+              timeoutMs: 25000, // shorter timeout for Netlify's 30s limit
+              retries: 3,
+              retryDelayMs: 2000,
+              errorMessage: `Gemini API request timed out or failed - ${generationId}`
+            }
+          );
+        } catch (apiError) {
+          // Handle API errors like socket hangups
+          console.error(`API error with Gemini for ${generationId}:`, apiError);
           
-          return res.status(400).json({ error: 'Gemini API key is required' });
+          // Save error status
+          const fs = require('fs');
+          const path = require('path');
+          const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+          const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+          
+          const errorStatus = {
+            status: 'failed',
+            message: 'Document generation failed due to API error',
+            error: apiError.message || 'API connection error',
+            debug: {
+              provider: 'gemini',
+              model: modelUsed,
+              timestamp: new Date().toISOString(),
+              error: {
+                message: apiError.message,
+                code: apiError.code || 'UNKNOWN',
+                type: apiError.constructor.name
+              }
+            }
+          };
+          
+          fs.writeFileSync(path.join(tmpDir, `${generationId}.json`), JSON.stringify(errorStatus));
+          throw apiError; // re-throw to be caught by the outer catch
         }
         
-        // Background processing - log progress
-        console.log(`Building prompt and preparing Gemini request for ${generationId}`);
+        // End timing
+        const endTime = Date.now();
+        const processingTime = endTime - startTime;
         
+        // Process the result
+        console.log(`Content generated with Gemini, now processing response for request ${generationId}`);
+        const response = result.response;
+        const responseText = response.text();
         
-        const genAI = new GoogleGenerativeAI(apiKey || process.env.GEMINI_API_KEY || '');
+        // Get token usage
+        const tokenUsage = response.usageMetadata;
+        const finalUsage = {
+          input_tokens: tokenUsage?.promptTokenCount || 0,
+          output_tokens: tokenUsage?.candidatesTokenCount || 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0
+        };
+        
+        // Process into sections
+        generatedContent = responseText;
+        const sections = parseMarkdownSections(responseText);
+        
+        console.log(`Successfully generated content with Gemini for request ${generationId}. Length: ${generatedContent.length} chars, Sections: ${sections.length}`);
+        console.log(`Token usage: input=${finalUsage.input_tokens}, output=${finalUsage.output_tokens}`);
+      } else if (provider === 'gemini') {
+        // Gemini implementation
+        if (!apiKey && !process.env.GEMINI_API_KEY) {
+          throw new Error('Gemini API key is required');
+        }
+        
+        // Initialize Gemini API
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(apiKey || process.env.GEMINI_API_KEY);
+        
+        // Determine which model to use (with fallback options)
+        const primaryModel = GEMINI_MODELS.PRIMARY; // e.g. gemini-1.5-pro
+        const fallbackModel = GEMINI_MODELS.FALLBACK; // e.g. gemini-1.0-pro
+        
+        console.log(`Attempting generation with Gemini ${primaryModel} (fallback: ${fallbackModel})`);
+        
+        // Build the prompt for Gemini
         const prompt = buildPrompt(projectDetails, selectedDocs);
         
         // Try with primary model first
+        let model = genAI.getGenerativeModel({ model: primaryModel });
+        let useModelName = primaryModel;
+        
         try {
-          modelUsed = GEMINI_MODELS.PRIMARY;
-          console.log(`Attempting with primary Gemini model: ${modelUsed}`);
+          // Start timing
+          const startTime = Date.now();
           
-          // Background processing - log progress
-          console.log(`Generating content with Gemini model: ${modelUsed} for request ${generationId}`);
-          
-          
-          const model = genAI.getGenerativeModel({ 
-            model: modelUsed,
-            safetySettings: safetySettings,
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: TOKEN_LIMITS.gemini
-            }
-          });
-          
-          // Properly implement Netlify background function pattern by returning 202 immediately
-          // This follows the Netlify docs recommendation for long-running processes
-          if (!res.headersSent) {
-            res.status(202).json({
-              message: 'Processing started',
-              requestId: generationId,
-              provider: 'gemini',
-              status: 'processing'
-            });
-          }
-          
-          // Execute the model call with proper timeout handling
-          // Using proper timeout handling but still allowing full 15-minute background execution
-          const result = await withTimeout(
-            model.generateContent({ 
+          // Use withRetry with proper timeout to prevent socket hang up errors
+          const result = await withRetry(
+            () => model.generateContent({ 
               contents: [{ role: 'user', parts: [{ text: prompt }] }] 
             }),
-            // Set timeout to 14 minutes to allow for proper cleanup before Netlify's 15 minute limit
-            840000, // 14 minutes in ms
-            `Gemini API request timed out after 14 minutes`
+            {
+              timeoutMs: 25000, // shorter timeout for Netlify's 30s limit
+              retries: 3,
+              retryDelayMs: 2000,
+              errorMessage: `Gemini API request timed out or failed - ${generationId}`
+            }
           );
           
-          // Background processing - log progress
+          // End timing
+          const endTime = Date.now();
+          const processingTime = endTime - startTime;
+          
+          // Process the result
           console.log(`Content generated with Gemini, now processing response for request ${generationId}`);
+          const response = (result as any).response;
+          const responseText = response.text();
           
+          // Get token usage
+          const tokenUsage = response.usageMetadata as any;
+          const usageData = {
+            input_tokens: tokenUsage?.promptTokenCount || 0,
+            output_tokens: tokenUsage?.candidatesTokenCount || 0,
+            total_tokens: (tokenUsage?.promptTokenCount || 0) + (tokenUsage?.candidatesTokenCount || 0)
+          };
           
-          // Safely extract text
+          // Process into sections
+          generatedContent = responseText;
+          
+          console.log(`Successfully generated content with Gemini (${useModelName}) for request ${generationId}. Length: ${generatedContent.length} chars`);
+          console.log(`Token usage: input=${usageData.input_tokens}, output=${usageData.output_tokens}, total=${usageData.total_tokens}`);
+        } catch (geminiError) {
+          console.error(`Error with primary Gemini model ${primaryModel}:`, geminiError);
+          
+          // If the primary model fails, try the fallback model
           try {
-            generatedContent = result.response.text();
-          } catch (e) {
-            console.warn("Gemini response.text() failed, trying manual extraction.", e);
-            generatedContent = result.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
-          }
-          
-        } catch (primaryModelError) {
-          // If primary model fails, try fallback model
-          console.warn(`Primary Gemini model failed: ${(primaryModelError as Error).message}. Trying fallback model.`);
-          
-          // Background processing - log fallback attempt
-          console.log(`Primary Gemini model failed for request ${generationId}, trying fallback model: ${GEMINI_MODELS.FALLBACK}`);
-          console.error(`Error was: ${(primaryModelError as Error).message}`);
-          
-          
-          try {
-            modelUsed = GEMINI_MODELS.FALLBACK;
-            console.log(`Attempting with fallback Gemini model: ${modelUsed}`);
+            console.log(`Trying fallback Gemini model ${fallbackModel} for request ${generationId}`);
+            model = genAI.getGenerativeModel({ model: fallbackModel });
+            useModelName = fallbackModel;
             
-            const fallbackModel = genAI.getGenerativeModel({ 
-              model: modelUsed,
-              safetySettings: safetySettings,
-              generationConfig: {
-                temperature: 0.3,
-                maxOutputTokens: TOKEN_LIMITS.gemini
-              }
-            });
-            
-            // Background processing - log fallback progress
-            console.log(`Generating content with fallback Gemini model: ${modelUsed} for request ${generationId}`);
-            
-            
-            // Execute the fallback model with proper timeout handling
-            const fallbackResult = await withTimeout(
-              fallbackModel.generateContent({ 
+            // Use withRetry with proper timeout to prevent socket hang up errors with fallback model
+            const fallbackResult = await withRetry(
+              () => model.generateContent({ 
                 contents: [{ role: 'user', parts: [{ text: prompt }] }] 
               }),
-              // Set timeout to 14 minutes to allow for proper cleanup before Netlify's 15 minute limit
-              840000, // 14 minutes in ms
-              `Gemini fallback API request timed out after 14 minutes`
+              {
+                timeoutMs: 25000, // shorter timeout for Netlify's 30s limit
+                retries: 2, // Fewer retries for fallback
+                retryDelayMs: 2000,
+                errorMessage: `Fallback Gemini API request timed out - ${generationId}`
+              }
             );
             
-            // Background processing - log fallback progress
-            console.log(`Content generated with fallback Gemini model for request ${generationId}, now processing response`);
+            const fallbackResponse = (fallbackResult as any).response;
+            generatedContent = fallbackResponse.text();
             
-            
-            // Safely extract text
-            try {
-              generatedContent = fallbackResult.response.text();
-            } catch (e) {
-              console.warn("Gemini fallback response.text() failed, trying manual extraction.", e);
-              generatedContent = fallbackResult.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
-            }
-          } catch (fallbackModelError) {
-            // If both models fail, determine appropriate status code
-            let statusCode = 500;
-            const errorMessage = (fallbackModelError as Error).message?.toLowerCase();
-            
-            if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
-              statusCode = 401;
-            } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
-              statusCode = 429;
-            } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
-              statusCode = 400;
-            }
-            
-            // Return error response 
-            return res.status(statusCode).json({ 
-              error: `Failed to generate documentation using ${provider}.`,
-              details: `API Error: ${(fallbackModelError as Error).message}` // Provide clearer error details
-            });
+            console.log(`Successfully generated content with fallback Gemini model for request ${generationId}. Length: ${generatedContent.length} chars`);
+          } catch (fallbackError) {
+            // Both models failed, log and re-throw
+            console.error(`Both Gemini models failed for request ${generationId}:`, fallbackError);
+            throw new Error(`Failed to generate with Gemini: ${(fallbackError as Error).message || 'Unknown error'}`); 
           }
         }
       } else {
         return res.status(400).json({ error: 'Unsupported provider' });
       }
     } catch (error) {
-      console.error(`Error generating content with ${provider}:`, error);
-      apiError = error; // Store the error to return details later
+      console.error(`Error generating content:`, error);
+      
+      // Store error details for response
+      const apiError = error; 
       
       // Determine appropriate status code
       let statusCode = 500;
-      const errorMessage = (error as Error).message?.toLowerCase();
+      const errorMessage = (error as Error).message?.toLowerCase() || 'Unknown error';
       
-      if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
+      if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
         statusCode = 401;
-      } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
+      } else if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
         statusCode = 429;
       } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
         statusCode = 400;
@@ -1000,10 +1227,43 @@ The documentation MUST include ALL requested document types, and each type shoul
   } catch (outerError) {
     // Catch any unexpected errors in the main handler logic
     console.error('Unhandled error in generate-docs handler:', outerError);
-    return res.status(500).json({ 
-      error: 'An unexpected server error occurred.', 
-      details: (outerError as Error).message 
-    });
+    
+    // Save the error status for the frontend to retrieve
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+      const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+      
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      
+      // Create error status file
+      const errorStatus = {
+        status: 'failed',
+        message: 'Document generation failed',
+        error: (outerError as Error).message || 'Unknown error',
+        debug: {
+          provider: req.body?.provider || 'unknown',
+          model: req.body?.provider || 'unknown',
+          timestamp: new Date().toISOString(),
+          error: {
+            message: (outerError as Error).message,
+            code: (outerError as any).code,
+            type: outerError.constructor.name
+          }
+        }
+      };
+      
+      fs.writeFileSync(path.join(tmpDir, `${generationId}.json`), JSON.stringify(errorStatus));
+      console.error(`Saved error status for ${generationId}`);
+    } catch (saveError) {
+      console.error(`Error saving error status for ${generationId}:`, saveError);
+    }
+    
+    // No response needed since we've already responded with 202
+    // This is a background function that's already returned to the client
   }
 }
 

@@ -46,9 +46,23 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // Add appropriate CORS headers for API calls
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Allow all origins for development
+  const allowedOrigins = [
+    'https://cook-fast.webvijayi.com',
+    'https://cookfast.netlify.app',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours cache for preflight
   
   // Handle OPTIONS request for CORS preflight
   if (req.method === 'OPTIONS') {
@@ -57,7 +71,11 @@ export default async function handler(
   
   // Only allow GET method
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      status: 'failed',
+      error: 'Method not allowed',
+      message: 'Only GET requests are supported for status checks' 
+    });
   }
 
   try {
@@ -128,7 +146,39 @@ export default async function handler(
       // Continue even if this fails
     }
     
-    // Return processing status with progress information
+    // Check the status file for generation processing status/errors
+    try {
+      // Use the OS tmp directory in serverless environments, otherwise use a local tmp directory
+      const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+      const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+      
+      const statusFilePath = path.join(tmpDir, `${requestId}.json`);
+      if (fs.existsSync(statusFilePath)) {
+        const statusContent = fs.readFileSync(statusFilePath, 'utf8');
+        const statusData = JSON.parse(statusContent);
+        
+        // If the status file indicates a failure, return that to the frontend
+        if (statusData.status === 'failed') {
+          console.log(`Found failed generation for request ${requestId} - Error: ${statusData.error}`);
+          
+          return res.status(200).json({
+            status: 'failed',
+            message: 'Your document generation has failed',
+            error: statusData.error || 'Unknown error occurred during generation',
+            debug: statusData.debug || {
+              provider: statusData.debug?.provider || 'unknown',
+              model: statusData.debug?.model || 'unknown',
+              timestamp: statusData.debug?.timestamp || new Date().toISOString(),
+            }
+          });
+        }
+      }
+    } catch (checkError) {
+      console.error('Error checking for failure status:', checkError);
+      // Continue with normal processing status if error checking fails
+    }
+    
+    // Return processing status with progress information if no failure detected
     const statusResponse: StatusResponse = {
       status: 'processing',
       message: 'Your document generation is still in progress. This may take several minutes for complex requests.',

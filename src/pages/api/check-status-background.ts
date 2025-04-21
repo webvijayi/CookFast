@@ -14,9 +14,35 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Set CORS headers for browser compatibility
+  const allowedOrigins = [
+    'https://cook-fast.webvijayi.com',
+    'https://cookfast.netlify.app',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours cache for preflight
+  
+  // Handle OPTIONS request for CORS preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   // Only allow GET method
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      status: 'failed',
+      error: 'Method not allowed',
+      message: 'Only GET requests are supported for status checks' 
+    });
   }
 
   try {
