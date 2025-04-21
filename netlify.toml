@@ -29,13 +29,8 @@
   # Use Node.js 18.x to support all modern JavaScript features
   node_version = "18.x"
 
-# Configure background functions for API calls that may take longer than 10 seconds
+# Configure generate-docs as a background function
 [functions."generate-docs"]
-  node_bundler = "esbuild"
-  node_version = "18.x"
-  background = true
-
-[functions."generate-docs-background"]
   node_bundler = "esbuild"
   node_version = "18.x"
   background = true

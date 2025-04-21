@@ -272,7 +272,15 @@ export default function EnhancedForm({
       // One final log of the document selection before submission
       console.log("Final document selection being submitted:", selectedDocs);
       
+      // Pass the collected data UP to the parent component via the onSubmit prop
+      console.log("EnhancedForm: Calling onSubmit prop with:", { 
+        projectDetails,
+        selectedDocs,
+        provider: selectedProvider,
+        apiKey: userApiKey
+      });
       await onSubmit(projectDetails, selectedDocs, selectedProvider, userApiKey);
+      console.log("EnhancedForm: onSubmit prop finished.");
     } catch (error) {
       console.error("Error in form submission:", error);
     }

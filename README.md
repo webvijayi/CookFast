@@ -26,6 +26,8 @@ CookFast is an AI-powered tool that automatically generates comprehensive projec
 *   **Dark Mode:** Toggle between light and dark themes for comfortable viewing.
 *   **Built with Modern Tech:** Next.js, React, TypeScript, Tailwind CSS.
 *   **JSON Export:** Download a structured JSON file with project details and document sections for AI IDE integration (e.g., Cursor, Windsurf, Aider).
+*   **Stop Generation:** Cancel an ongoing documentation generation process if needed.
+*   **Retry Generation:** Easily retry the generation process if it fails or if you want to attempt generation again with the same inputs.
 
 ---
 ## 🧑‍🍳 Frequently Asked Questions
@@ -103,7 +105,9 @@ No. API keys are validated client-side and never stored by CookFast. They are se
 3.  Fill in the details about your project (Name, Type, Goal, Features, Tech Stack).
 4.  Select the checkboxes for the document types you want to generate.
 5.  Click "Cook Up Docs!".
-6.  The generated Markdown content will appear in the results area below the form.
+6.  While generating, a "Stop Generation" button is available if you need to cancel.
+7.  The generated Markdown content will appear in the results area below the form.
+8.  If the generation fails or you want to try again, a "Retry Generation" button will be available in the results area.
 
 ---
 

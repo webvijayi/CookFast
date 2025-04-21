@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import EnhancedForm from '@/components/EnhancedForm';
@@ -155,6 +155,7 @@ export default function GeneratorSection() {
   const [isLoading, setIsLoading] = useState(false);
   const [generationStage, setGenerationStage] = useState('');
   const [generatedDocs, setGeneratedDocs] = useState<GeneratedDocumentation | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
@@ -164,6 +165,10 @@ export default function GeneratorSection() {
   const [keyValidationStatus, setKeyValidationStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
   const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
   const [isValidatingKey, setIsValidatingKey] = useState(false);
+  
+  // Add Refs for AbortController and Polling Interval
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Add debug logs
   const addDebugLog = (event: string, details: unknown = {}) => {
@@ -223,292 +228,262 @@ export default function GeneratorSection() {
     provider: AIProvider,
     apiKey: string
   ) => {
-    // Reset generatedDocs when starting a new generation
-    setGeneratedDocs(null);
-    
-    // Update state with provided values
+    // --- Reset Section ---
+    setGeneratedDocs(null); // Clear previous results
+    setError(null); // Clear previous errors
+    setIsLoading(true);
+    setGenerationStage('Preparing to generate documents');
+    addDebugLog('Form Submit: Start', { provider, numDocs: Object.values(selectedDocs).filter(Boolean).length });
+
+    // --- Abort Previous (if any) ---
+    handleStopGeneration(); // Stop any previous ongoing process
+
+    // --- Setup Abort Controller for Initial Request ---
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // --- Update State ---
     setProjectDetails(projectDetails);
     setSelectedDocs(selectedDocs);
     setProvider(provider);
     setApiKey(apiKey);
     
-    // Set loading state and initial generation stage
-    setIsLoading(true);
-    setGenerationStage('Preparing to generate documents');
-    
-    // Ensure we're passing the full object with proper values
+    // --- Sanitize Data ---
     const sanitizedProjectDetails = {
       ...projectDetails,
-      projectName: projectDetails.projectName.trim(),
+      projectName: projectDetails.projectName.trim() || 'Untitled Project', // Add default
       projectGoal: projectDetails.projectGoal.trim(),
       projectType: projectDetails.projectType || 'Web Application',
       features: projectDetails.features || '',
       techStack: projectDetails.techStack || ''
     };
     
-    // Generate a unique request ID for this generation
-    const requestId = `request_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
+    const selectedDocKeys = Object.entries(selectedDocs)
+      .filter(([, value]) => value)
+      .map(([key]) => key);
+
+    if (selectedDocKeys.length === 0) {
+        setError('Please select at least one document type to generate.');
+        setIsLoading(false);
+        setGenerationStage('Error');
+        addDebugLog('Form Submit: Error', { reason: 'No documents selected' });
+        return;
+    }
+
+    addDebugLog('Form Submit: Data Prepared', { details: sanitizedProjectDetails, docs: selectedDocKeys });
+
+    // --- API Call (Initial Background Request) ---
     try {
-      // Make the initial API call using the background function endpoint
-      const response = await fetch('/api/generate-docs-background', {
+      setGenerationStage('Initiating generation task...');
+      addDebugLog('Form Submit: Sending initial request', { endpoint: '/api/generate-docs' });
+
+      const response = await fetch('/api/generate-docs', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           projectDetails: sanitizedProjectDetails,
-          selectedDocs: selectedDocs,
+          selectedDocs: selectedDocKeys,
           provider,
           apiKey,
-          requestId
-        })
+        }),
+        signal: controller.signal, // Pass the abort signal
       });
-      
-      // Check for initial response status
-      if (response.status === 202) {
-        // This is the expected status for background functions
-        setGenerationStage('Request accepted - Processing in background...');
-        
-        // Start polling for completion
-        startPollingForResults(requestId);
-        return;
-      }
-      
-      // Handle other response statuses
+
+      addDebugLog('Form Submit: Initial response received', { status: response.status });
+
+      // Clear the abort controller ref as the initial request is done
+      abortControllerRef.current = null;
+
       if (!response.ok) {
-        let errorDetails = `HTTP error! Status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorDetails = errorData.error || errorData.message || errorDetails;
-        } catch (parseError) {
-          console.error('Could not parse error response body', parseError);
-        }
-        throw new Error(errorDetails);
+        const errorData = await response.json().catch(() => ({ error: 'Failed to parse error response.' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
-      
-      // If we got here, it means the function ran synchronously
+
       const data = await response.json();
+      addDebugLog('Form Submit: Initial response parsed', { data });
+
+      if (data.requestId) {
+        setGenerationStage('Generation task started. Waiting for results...');
+        startPollingForResults(data.requestId);
+      } else {
+        // Handle potential immediate success (though unlikely for background)
+        if (data.content || data.sections) {
       handleSuccessfulResponse(data);
-      
-    } catch (error) {
-      console.error('Error generating documentation:', error);
-      setGenerationStage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } else {
+            throw new Error(data.error || 'Invalid response from server after initiating task.');
+        }
+      }
+    } catch (error: any) {
+      // Handle AbortError specifically
+      if (error.name === 'AbortError') {
+        console.log('Initial fetch aborted.');
+        setError('Generation initiation cancelled.');
+        setGenerationStage('Stopped');
+        addDebugLog('Form Submit: Initial Fetch Aborted');
+      } else {
+        console.error('Error during initial generation request:', error);
+        setError(`Failed to start generation: ${error.message}`);
+        setGenerationStage('Error');
+        addDebugLog('Form Submit: Initial Fetch Error', { error: error.message });
+      }
       setIsLoading(false);
+      // Ensure polling is stopped if an error occurred before polling started
+      handleStopGeneration();
     }
   };
   
-  // Start polling for background function results
+  // --- Polling Logic ---
   const startPollingForResults = (requestId: string) => {
-    setGenerationStage('Your request is being processed in the background. This may take a few minutes.');
-    
-    // Create initial background processing state
-    const backgroundState: GeneratedDocumentation = {
-      message: 'Your request is being processed in the background.',
-      content: '',
-      sections: [],
-      isBackgroundProcessing: true,
-      requestId: requestId,
-      debug: {
-        provider: provider,
-        model: 'Unknown',
-        timestamp: new Date().toISOString(),
-        contentLength: 0,
-        processingTimeMs: 0,
-        tokensUsed: {
-          input: 0,
-          output: 0,
-          total: 0
-        }
-      }
-    };
-    
-    setGeneratedDocs(backgroundState);
-    
-    // Check for results immediately
-    setTimeout(() => checkForResults(requestId), 2000);
-    setIsLoading(false);
-  };
-  
-  // Check for completed results
-  const checkForResults = async (requestId: string) => {
-    // Add defensive check for requestId
-    if (!requestId) {
-      console.error('Cannot check for results: Missing requestId');
-      return false;
+    addDebugLog('Polling: Start', { requestId });
+    setGenerationStage('Task running, checking for updates...');
+
+    // Clear any existing interval before starting a new one
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
     }
 
+    // Initial check after a short delay
+    setTimeout(() => checkForResults(requestId), 3000);
+
+    // Start polling
+    pollingIntervalRef.current = setInterval(() => {
+      checkForResults(requestId);
+    }, 10000); // Poll every 10 seconds
+  };
+
+  const checkForResults = async (requestId: string) => {
+    addDebugLog('Polling: Check Status', { requestId });
+    setGenerationStage('Checking generation status...'); // Update stage during check
+
     try {
-      // Update UI to show we're checking status
-      setGenerationStage(prevStage => 
-        prevStage.includes('checking') ? prevStage : `${prevStage} (checking for results...)`
-      );
-      
-      // Make the API call to check status
       const response = await fetch(`/api/check-status?requestId=${requestId}`);
-      
-      // Check if we have a valid response
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Check if generation is still in progress
-        if (data.status === 'processing') {
-          // Update the UI with the latest status message
-          setGenerationStage(data.message || 'Still processing your request...');
-          
-          // Schedule another check in a few seconds
-          setTimeout(() => checkForResults(requestId), 5000);
-          return false;
-        }
-        
-        // Check if the generation failed
-        if (data.status === 'failed') {
-          setGenerationStage(`Error: ${data.error || 'Generation failed'}`);
-          setIsLoading(false);
-          return false;
-        }
-        
-        // Only show success message if we actually have result data
-        if (data.result) {
-          // Validate that there's actually content in the result
-          const hasContent = data.result.content && 
-                             typeof data.result.content === 'string' && 
-                             data.result.content.trim().length > 50;
-          
-          const hasSections = Array.isArray(data.result.sections) && 
-                              data.result.sections.length > 0 && 
-                              data.result.sections.some((section: APIDocumentSection) => 
-                                section.content && 
-                                typeof section.content === 'string' && 
-                                section.content.trim().length > 0
-                              );
-          
-          // If no valid content was found, treat as an error
-          if (!hasContent && !hasSections) {
-            addDebugLog('Background process response validation failed', { 
-              contentLength: data.result.content?.length || 0,
-              sectionsCount: data.result.sections?.length || 0
-            });
-            
-            setGenerationStage('Error: Generated content was empty or invalid. Please try again with different settings.');
-            setIsLoading(false);
-            return false;
-          }
-          
-          setGenerationStage('Documents generated! Processing results...');
-          
-          // Get token usage data if available
-          const tokensUsed = data.tokensUsed || data.result?.debug?.tokensUsed || {
-            input: 0,
-            output: 0,
-            total: 0
-          };
-          
-          // Process the results
-          setGeneratedDocs(data.result);
-          setIsLoading(false);
-          
-          // Dispatch the generation success event to trigger the display in parent component
-          const successEvent = new CustomEvent('cookfast:generationSuccess', {
-            detail: {
-              content: data.result.content,
-              sections: data.result.sections,
-              debug: data.result.debug
-            }
-          });
-          
-          // Add debug log for the event dispatch
-          addDebugLog('Dispatching generationSuccess event from background process', {
-            sectionsCount: data.result.sections?.length || 0,
-            contentLength: data.result.content?.length || 0,
-            hasValidContent: hasContent,
-            hasValidSections: hasSections
-          });
-          
-          // Dispatch the event to notify the main component
-          document.dispatchEvent(successEvent);
-          
-          return true;
-        } else {
-          // We got a 'completed' status but no result data
-          setGenerationStage('Error: No content was generated. Please try again.');
-          setIsLoading(false);
-          return false;
-        }
-      } else {
-        // Handle non-200 responses
-        let errorMessage = 'API request failed';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || `Request failed with status ${response.status}`;
-        } catch (e) {
-          // If we can't parse the response
-          errorMessage = `Request failed with status ${response.status}`;
-        }
-        
-        setGenerationStage(`Error: ${errorMessage}`);
-        console.error('API error:', errorMessage);
-        
-        // Schedule another check in case it's a temporary issue
-        setTimeout(() => checkForResults(requestId), 5000);
-        return false;
+      addDebugLog('Polling: Response Received', { requestId, status: response.status });
+
+      if (!response.ok) {
+         // Handle non-200 responses gracefully, maybe retry or log
+         console.warn(`Polling check failed with status: ${response.status}`);
+         setGenerationStage('Status check failed, will retry...');
+         addDebugLog('Polling: Check Status Failed', { requestId, status: response.status });
+         // Don't throw an error yet, allow polling to continue unless it's a fatal error like 404
+         if (response.status === 404) {
+            throw new Error('Generation task not found.');
+         }
+         return; // Continue polling on transient errors
       }
-    } catch (error) {
-      console.error('Error checking for results:', error);
-      // Update UI with error message
-      setGenerationStage(`Error checking for results: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      // Continue polling despite the error
-      setTimeout(() => checkForResults(requestId), 5000);
-      return false;
+
+      const data = await response.json();
+      addDebugLog('Polling: Data Parsed', { requestId, data });
+
+      if (data.status === 'completed') {
+        handleStopGeneration(); // Stop polling on completion
+        handleSuccessfulResponse(data.result);
+      } else if (data.status === 'failed') {
+        handleStopGeneration(); // Stop polling on failure
+        throw new Error(data.error || 'Generation task failed.');
+      } else if (data.status === 'processing') {
+        // Update progress if available
+        const progress = data.progress || 'Task is processing';
+        setGenerationStage(`Processing... (${progress})`);
+        addDebugLog('Polling: Still Processing', { requestId, progress });
+      } else {
+         // Handle unexpected status
+         console.warn('Unexpected status received:', data.status);
+         setGenerationStage(`Unexpected status: ${data.status}`);
+         addDebugLog('Polling: Unexpected Status', { requestId, status: data.status });
+      }
+    } catch (error: any) {
+      console.error('Error during polling:', error);
+      setError(`Error checking status: ${error.message}`);
+      setGenerationStage('Error checking status');
+      addDebugLog('Polling: Error', { requestId, error: error.message });
+      handleStopGeneration(); // Stop polling on error
+            setIsLoading(false);
     }
   };
-  
-  // Handle successful API response
+
+  // --- Stop Polling/Generation --- //
+  const handleStopGeneration = () => {
+      if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          abortControllerRef.current = null;
+          addDebugLog('Stop Action: Aborted initial request');
+      }
+      if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+          addDebugLog('Stop Action: Cleared polling interval');
+      }
+      // Reset state only if currently loading/generating
+      if (isLoading) {
+         setIsLoading(false);
+         setGenerationStage('Stopped by user');
+         addDebugLog('Stop Action: Resetting state');
+         // Optionally set an error message
+         // setError('Generation stopped by user.');
+      }
+  };
+
   const handleSuccessfulResponse = (data: any) => {
+    addDebugLog('Response Handler: Success', { data });
     if (!data) {
-      throw new Error('Empty response received from API');
+      // Still throw error if the entire data object is missing
+      setError('Empty response received from API');
+      setGenerationStage('Error: Received empty response');
+      setIsLoading(false);
+      addDebugLog('Response Handler: Error - Empty data object');
+      return; // Exit early
     }
     
-    // Validate that we have actual content data
-    const hasContent = data.content && typeof data.content === 'string' && data.content.trim().length > 50;
-    const hasSections = Array.isArray(data.sections) && data.sections.length > 0 && 
-      data.sections.some((section: APIDocumentSection) => 
-        section.content && 
-        typeof section.content === 'string' && 
-        section.content.trim().length > 0
-      );
+    // Validate that we have *some* content data, less strictly
+    // Check if content is a non-empty string OR if sections is a non-empty array
+    const hasSomeContent = (data.content && typeof data.content === 'string' && data.content.trim().length > 0) || 
+                         (Array.isArray(data.sections) && data.sections.length > 0);
+
     
-    if (!hasContent && !hasSections) {
-      addDebugLog('API response validation failed', { 
+    if (!hasSomeContent) {
+      addDebugLog('API response validation failed (Relaxed Check)', { 
+        contentPresent: !!data.content,
+        contentType: typeof data.content,
         contentLength: data.content?.length || 0,
+        sectionsPresent: Array.isArray(data.sections),
         sectionsCount: data.sections?.length || 0
       });
       
-      setGenerationStage('Error: Generated content was empty or invalid. Please try again with different settings.');
+      // Updated error message for clarity
+      setError('Generated content was empty or missing. Please try regenerating, perhaps with different settings.');
+      setGenerationStage('Error: Generated content appears empty');
       setIsLoading(false);
-      return;
+      return; // Exit early
     }
     
-    // Store the generated docs directly
-    setGeneratedDocs(data);
+    // Ensure sections is always an array, even if empty or missing initially
+    const sections = Array.isArray(data.sections) ? data.sections : [];
+    // Ensure content is a string, default to empty if missing or wrong type
+    const content = (data.content && typeof data.content === 'string') ? data.content : '';
+
+    // Prepare the data structure expected by the rest of the app
+    const structuredData = {
+       ...data, // Keep original debug info etc.
+       content: content, // Use sanitized content
+       sections: sections // Use sanitized sections
+    };
+
+    // Store the structured generated docs
+    setGeneratedDocs(structuredData);
     setGenerationStage('Generation complete!');
     setIsLoading(false);
     
-    // Dispatch the generation success event to trigger the display in parent component
+    // Dispatch the generation success event with the structured data
     const successEvent = new CustomEvent('cookfast:generationSuccess', {
-      detail: {
-        content: data.content,
-        sections: data.sections,
-        debug: data.debug
-      }
+      detail: structuredData // Pass the cleaned-up data
     });
     
     // Add debug log for the event dispatch
-    addDebugLog('Dispatching generationSuccess event', {
-      sectionsCount: data.sections?.length || 0,
-      contentLength: data.content?.length || 0,
-      hasValidContent: hasContent,
-      hasValidSections: hasSections
+    addDebugLog('Dispatching generationSuccess event (Relaxed Validation)', {
+      sectionsCount: structuredData.sections?.length || 0,
+      contentLength: structuredData.content?.length || 0,
     });
     
     // Dispatch the event to notify the main component
@@ -580,245 +555,121 @@ export default function GeneratorSection() {
     return null;
   };
 
+  // --- JSX Rendering --- //
   return (
-    <section id="generator" className="py-12 md:py-16">
-      <div className="container max-w-4xl">
-        <h2 className="text-3xl font-bold text-center mb-8">Generate Project Documentation</h2>
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="text-center bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 inline-block text-transparent bg-clip-text text-3xl font-bold">
-              Generate Documentation
-            </CardTitle>
-            <CardDescription className="text-center text-muted-foreground" suppressHydrationWarning={true}>
-              Fill in your project details, select the document types you need, and let AI do the rest.
-              <span className="block mt-1 text-xs text-gray-500">
-                All processing happens securely in your browser and on our servers.
-              </span>
+    <section id="generator" className="py-16 md:py-24 bg-muted/40 dark:bg-muted/10">
+      <div className="container max-w-6xl mx-auto px-4">
+        <Card className="shadow-lg overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6">
+            <CardTitle className="text-3xl font-bold text-center">Generate Your Project Docs</CardTitle>
+            <CardDescription className="text-center mt-2">
+              Fill in your project details, select documents, choose your AI, and let CookFast handle the rest!
             </CardDescription>
           </CardHeader>
           
-          <CardContent>
+          <CardContent className="p-6 md:p-8">
+            {/* Use EnhancedForm for inputs */}
             <EnhancedForm 
-              onSubmit={handleFormSubmit}
-              isLoading={isLoading}
-              generationStage={generationStage}
+                onSubmit={handleFormSubmit} // Pass the submit handler
+                isLoading={isLoading} // Pass loading state
               keyValidationStatus={keyValidationStatus}
               keyValidationError={keyValidationError}
               validateKey={validateKey}
               isValidatingKey={isValidatingKey}
             />
 
-            {/* Generation Status Display */}
-            {generationStage && (
-              <div className="mt-6 p-4 border rounded-md bg-muted">
-                <div className="flex items-center">
-                  {isLoading && <SpinnerIcon className="mr-2 h-4 w-4" />}
-                  <p className="text-sm font-medium">{generationStage}</p>
+            {/* Loading and Status Indicator */}
+            {isLoading && (
+              <div className="mt-6 text-center p-4 rounded-md bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700">
+                <div className="flex items-center justify-center mb-2">
+                  <SpinnerIcon className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
+                  <p className="font-semibold text-blue-700 dark:text-blue-300">Generating Documents...</p>
+                </div>
+                <p className="text-sm text-blue-600 dark:text-blue-400">{generationStage || 'Please wait...'}</p>
+                {/* Add Stop Button Here */}
+                <div className="mt-4">
+                   <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleStopGeneration}
+                      disabled={!isLoading} // Disable if not loading
+                   >
+                      Stop Generation
+                   </Button>
                 </div>
               </div>
             )}
 
-            {/* Debug Panel */}
-            <div className="mt-2">
-              <button 
-                onClick={() => setShowDebugPanel(!showDebugPanel)}
-                className="text-xs text-muted-foreground hover:underline"
-              >
-                {showDebugPanel ? 'Hide Debug Info' : 'Show Debug Info'}
-              </button>
-              
-              {showDebugPanel && (
-                <div className="mt-2 p-3 border rounded text-xs bg-slate-50 dark:bg-slate-900 overflow-y-auto max-h-40">
-                  {debugLogs.length > 0 ? (
-                    debugLogs.map((log, index) => (
-                      <div key={index} className="mb-1">
-                        <span className="opacity-50">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        {' '}<span className="font-mono">{log.event}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-gray-500 dark:text-gray-400">No logs yet</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Results Section */}
-            {!isLoading && generatedDocs && (
-              <div className="mt-8 p-6 border rounded-lg" suppressHydrationWarning={true}>
-                {generatedDocs.content && generatedDocs.sections && generatedDocs.sections.length > 0 ? (
-                  <div>
-                    <div className="flex items-center mb-4 text-green-600 dark:text-green-400">
-                      <svg className="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <h3 className="font-medium text-lg text-green-700 dark:text-green-300">
-                        Documentation Generated Successfully!
-                      </h3>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm text-muted-foreground">
-                        Generated {generatedDocs.sections.length} document sections with {(generatedDocs.content?.length || 0).toLocaleString()} characters
-                      </p>
-                    </div>
-                    
-                    <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-md border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-start">
-                        <svg className="h-5 w-5 mr-2 mt-0.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <div>
-                          <p className="text-sm font-medium text-blue-800 dark:text-blue-300">Your documentation is ready to view!</p>
-                          <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                            You should be automatically redirected to the results panel. If not, please check the tabs above or refresh the page.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-8 text-center">
-                    <div className="flex items-center justify-center mb-4 text-red-500">
-                      <svg className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <h3 className="font-medium text-lg">API Request Failed</h3>
-                    </div>
-                    <p>The AI provider encountered an error processing your request. This could be due to rate limits, quota restrictions, or connectivity issues.</p>
-                    <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 text-left rounded w-full">
-                      <p className="text-sm font-mono text-red-500">{generationStage}</p>
-                    </div>
-                    <div className="mt-4">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setGeneratedDocs(null);
-                          setIsLoading(false);
-                          setGenerationStage('');
-                        }}
-                        className="border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-800/50"
-                      >
-                        Try Again
-                      </Button>
-                    </div>
-                  </div>
-                )}
+            {/* Error Display */}
+            {error && !isLoading && ( // Only show error if not loading
+              <div className="mt-6 text-center p-4 rounded-md bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                <p className="font-semibold text-red-700 dark:text-red-300">Error</p>
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               </div>
             )}
+
           </CardContent>
           
-          <CardFooter className="flex justify-between border-t pt-6 text-sm text-muted-foreground">
-            <div>Need help? Check our <a href="#faq" className="underline">FAQ</a> section.</div>
-            <div>Using AI responsibly ✨</div>
+          {/* Debug Panel Toggle - Moved outside CardContent */}
+          <CardFooter className="p-4 bg-muted/30 dark:bg-muted/5 border-t justify-center">
+             <Button variant="ghost" size="sm" onClick={() => setShowDebugLogs(!showDebugLogs)}>
+                {showDebugLogs ? 'Hide' : 'Show'} Debug Logs
+             </Button>
           </CardFooter>
-        </Card>
 
-        {/* Share section - with social buttons */}
-        <div className="mt-12 p-6 bg-card rounded-xl shadow-sm border">
-          <h3 className="text-xl font-semibold mb-4 text-center">
-            <ShareIcon className="mr-2 h-5 w-5 inline-block" /> Share CookFast
-          </h3>
-          <p className="text-center text-muted-foreground mb-6">
-            Found CookFast helpful? Share it with your network! 🌟
-          </p>
-          {/* Social sharing buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('x')}
-            >
-              <TwitterIcon className="mr-2" /> Twitter
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('facebook')}
-            >
-              <FacebookIcon className="mr-2" /> Facebook
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('whatsapp')}
-            >
-              <WhatsAppIcon className="mr-2" /> WhatsApp
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('telegram')}
-            >
-              <TelegramIcon className="mr-2" /> Telegram
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('email')}
-            >
-              <EmailIcon className="mr-2" /> Email
-            </Button>
-            <Button 
-              variant="outline" 
-              className="bg-background hover:bg-muted flex items-center" 
-              size="sm"
-              onClick={() => handleShare('link')}
-            >
-              <LinkIcon className="mr-2" /> Copy Link
-            </Button>
-          </div>
-
-          <div className="mt-8 text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              CookFast processes your project data via your chosen AI provider.
-              Your data is not stored on our servers beyond the current session.
-            </p>
-            <div className="flex justify-center gap-4">
-              <Button variant="outline" size="sm" asChild>
-                <a href="https://github.com/webvijayi/cookfast" target="_blank" rel="noopener noreferrer">
-                  View on GitHub
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <a href="#" onClick={(e) => { e.preventDefault(); window.scrollTo({top: 0, behavior: 'smooth'}); }}>
-                  Back to Top
-                </a>
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowDebugLogs(!showDebugLogs)}
-              >
-                {showDebugLogs ? 'Hide Debug' : 'Show Debug'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Debug Panel - Only shown when toggled */}
+          {/* Debug Panel */} 
           {showDebugLogs && (
-            <div className="mt-8 bg-card border rounded-lg shadow-lg p-4 overflow-auto max-h-[500px]">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-lg font-semibold">Debug Logs</h3>
-                <Button variant="ghost" size="sm" onClick={() => setShowDebugLogs(false)}>
-                  <span className="sr-only">Close</span>
-                  &times;
-                </Button>
-              </div>
-              <pre className="text-xs whitespace-pre-wrap bg-muted p-2 rounded">{JSON.stringify(debugLogs, null, 2)}</pre>
+            <div className="bg-gray-800 text-white p-4 max-h-60 overflow-y-auto text-xs font-mono">
+              <h4 className="font-bold mb-2">Debug Logs</h4>
+              {debugLogs.length > 0 ? (
+                debugLogs.map((log, index) => (
+                  <div key={index} className="whitespace-pre-wrap mb-1">
+                    <span className="text-gray-400">[{log.timestamp}]</span> {log.event}: {JSON.stringify(log.details, null, 2)}
+                  </div>
+                ))
+              ) : (
+                <p>No logs yet.</p>
+              )}
             </div>
           )}
+        </Card>
 
+        {/* Social Sharing Section */}
+        <div className="mt-12 text-center">
+            <h3 className="text-lg font-semibold mb-4">Like CookFast? Share it!</h3>
+            <div className="flex justify-center gap-3">
+                {/* Twitter/X */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('x')} aria-label="Share on X">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13.6823 10.6218L20.2391 3H18.6854L12.9921 9.61788L8.44486 3H3.2002L10.0765 13.0074L3.2002 21H4.75404L10.7663 14.0113L15.5549 21H20.7996L13.6819 10.6218H13.6823ZM11.5541 13.0956L10.8574 12.0991L5.31391 4.16971H7.70053L12.1742 10.5689L12.8709 11.5655L18.6861 19.8835H16.2995L11.5541 13.096V13.0956Z" /></svg>
+                </Button>
+                {/* Facebook */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('facebook')} aria-label="Share on Facebook">
+                    <FacebookIcon className="h-5 w-5" />
+                </Button>
+                {/* WhatsApp */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('whatsapp')} aria-label="Share on WhatsApp">
+                    <WhatsAppIcon className="h-5 w-5" />
+                </Button>
+                {/* Telegram */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('telegram')} aria-label="Share on Telegram">
+                    <TelegramIcon className="h-5 w-5" />
+                </Button>
+                 {/* LinkedIn */}
+                <Button variant="outline" size="icon" onClick={() => {/* Add LinkedIn share handler */}} aria-label="Share on LinkedIn">
+                   <LinkedInIcon className="h-5 w-5" />
+                </Button>
+                {/* Email */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('email')} aria-label="Share via Email">
+                    <EmailIcon className="h-5 w-5" />
+                </Button>
+                {/* Copy Link */}
+                <Button variant="outline" size="icon" onClick={() => handleShare('link')} aria-label="Copy Link">
+                    <LinkIcon className="h-5 w-5" />
+                </Button>
+            </div>
           {/* Copy Notification */}
           {showCopyNotification && (
-            <div className="fixed bottom-4 left-4 bg-secondary text-secondary-foreground p-2 rounded-full shadow-lg z-50 text-xs">
-              Copied to clipboard!
-            </div>
+                <p className="text-sm text-green-600 mt-2">Link copied to clipboard!</p>
           )}
         </div>
       </div>

@@ -718,57 +718,37 @@
 3. Review other components for potential responsive design issues
 4. Monitor HMR performance with the new configuration
 
-## YYYY-MM-DD - Complete UI Redesign & Refactor
+## 2023-11-22 - Refactored API, Fixed Timeouts, and Improved Error Display
 
-- **Project Structure & Layout:**
-  - Created `src/components/layout/Header.tsx` with logo, navigation links (#features, #how-it-works, #faq, #generate), and theme toggle.
-  - Created `src/components/layout/Footer.tsx` with copyright info and links (GitHub, Report Issue).
-  - Created `src/components/layout/MainLayout.tsx` to wrap pages with Header and Footer.
-  - Updated `src/pages/_app.tsx` to use `MainLayout`, removing standalone theme toggle.
-- **Styling & Design System:**
-  - Updated `src/styles/globals.css`:
-    - Switched to `@import \"tailwindcss\"`.
-    - Defined CSS variables using OKLCH format for light/dark modes following 60/30/10 rule.
-    - Registered variables using `@theme` directive.
-    - Added modern gradient variables (`--gradient-brand-light/dark`, `--gradient-subtle-light/dark`).
-    - Added `scroll-behavior: smooth`.
-    - Removed old theme toggle and gradient helper styles.
-  - Updated `tailwind.config.js`:
-    - Removed hardcoded `theme.extend.colors`.
-    - Added `container` configuration.
-    - Added `tailwindcss-animate` plugin and keyframes/animations (`accordion-down`, `accordion-up`, `fade-in`).
-    - Registered gradient variables as background image utilities.
-- **Page Content (`src/pages/index.tsx`):**
-  - Refactored the monolithic component into sections: `HeroSection`, `FeaturesSection`, `HowItWorksSection`, `FaqSection`, `GeneratorSection`.
-  - Added section IDs for navigation.
-  - Implemented Hero section with gradient background, engaging headline, tagline, CTA buttons (Generate, GitHub), and placeholder image.
-  - Implemented Features section with card layout, updated copy, and subtle gradient background.
-  - Implemented How It Works section with 3-step process description.
-  - Implemented FAQ section using `shadcn/ui Accordion`.
-  - Restructured the main form/generator logic within `GeneratorSection` using `shadcn/ui` components (`Card`, `Input`, `Textarea`, `Label`, `RadioGroup`, `Checkbox`, `Button`).
-  - Applied `animate-fade-in` to sections and elements.
-  - Updated `Head` metadata (title, description, keywords, JSON-LD schema).
-  - Added/fixed prop types and handler signatures for section components.
-- **Components:**
-  - Installed missing `shadcn/ui` components: `input`, `textarea`, `label`, `radio-group`, `checkbox`, `card`, `accordion`.
-  - Fixed type errors and corrected `
+### Development Steps
+1. Consolidated API endpoints:
+   - Deleted redundant `src/pages/api/generate-docs.ts`.
+   - Renamed `src/pages/api/generate-docs-background.ts` to `src/pages/api/generate-docs.ts`.
+   - Updated `netlify.toml` to reflect the single background function endpoint.
+   - Updated `src/components/GeneratorSection.tsx` to call the consolidated `/api/generate-docs` endpoint.
 
-## 2023-11-17 15:20 - Documentation Content Validation Fixes
+2. Adjusted API timeout for background functions:
+   - Added `BACKGROUND_API_TIMEOUT_MS` (14 minutes) to `src/utils/index.ts`.
+   - Modified `withRetry` utility to accept an `isBackground` flag and use the longer timeout for background API calls.
+   - Passed `isBackground: true` to all `withRetry` calls within `src/pages/api/generate-docs.ts`.
+   - Added defensive logging to `withRetry` to confirm timeout values.
 
-- Enhanced document-tabs component with improved content validation logic
-- Added title-based validation to recognize standard section patterns
-- Implemented thorough content validation in GeneratorSection before showing results
-- Added minimum content length requirements to filter out empty responses
-- Fixed edge cases where valid content was incorrectly flagged as empty
-- Added detailed logging for better issue diagnosis
+3. Improved frontend error handling:
+   - Updated `checkForResults` in `src/components/GeneratorSection.tsx` to set `generatedDocs` state to `null` in all failure scenarios.
+   - Refactored frontend rendering logic to have a dedicated error display block based solely on the `generationStage` state, removing conflicting messages.
 
-## 2023-11-16 13:45 - Documentation Generation Enhancements
+### Key Decisions
+- Simplified the backend by removing the redundant API endpoint, adhering to YAGNI.
+- Addressed the root cause of API timeouts within background functions by increasing the specific timeout for those calls, while keeping the default shorter for regular functions.
+- Added logging to verify timeout logic execution.
+- Improved user experience by showing specific backend errors instead of generic or conflicting frontend messages.
+- Ensured frontend state (`generatedDocs`) is correctly cleared on error to prevent inconsistent UI rendering.
 
-## 2024-09-21
-- Fixed 502 errors with Gemini API integration on Netlify by configuring background functions
-- Added `node_bundler = "esbuild"` configuration to Netlify functions
-- Configured `generate-docs` and `generate-docs-background` as background functions to prevent timeouts
-- Identified issue: Netlify free tier has a 10-second function timeout limitation which was causing Gemini API calls to fail
+### Next Steps
+1. Confirm successful deployment of latest changes to Netlify.
+2. Deploy the changes and thoroughly test the document generation flow, checking Netlify logs for timeout values.
+3. Monitor frontend and backend logs for any remaining errors or inconsistencies.
+4. Consider adding more granular progress updates during the background processing.
 
 ## 2023-11-21 - Fixed 502 Bad Gateway Errors in AI Document Generation
 
@@ -831,3 +811,17 @@
 3. Add proper client-side polling with exponential backoff for status checks
 4. Implement proper progress tracking for background document generation
 5. Add unit tests to validate function behavior in different environments
+
+## ${new Date().toISOString()} - Local Storage Fallback for Generation Results
+
+- **Modified `src/utils/saveResult.ts`:** Updated to check for Netlify Blob availability (`process.env.NETLIFY_BLOBS_CONTEXT`). If unavailable (e.g., running locally), it now saves generation results as JSON files to the `./tmp/` directory.
+- **Modified `src/pages/api/check-status.ts`:** Implemented corresponding logic. It now attempts to retrieve results from Netlify Blobs first, falling back to reading from the local `./tmp/` directory if Blobs are unavailable.
+- **Checked `.gitignore`:** Confirmed that the `tmp/` directory is ignored, preventing local results from being committed.
+- **Context:** This allows the document generation status check to function correctly during local development and testing where Netlify Blobs are not accessible.
+
+## [2024-08-02]
+- **Feature:** Enhanced AI prompt in `src/pages/api/generate-docs.ts` to include more form fields (`targetAudience`, `userPersonas`, `projectDescription`, etc.) for richer context.
+- **Fix:** Relaxed frontend content validation in `src/components/GeneratorSection.tsx` (`handleSuccessfulResponse`) to display results even if content is short, preventing premature errors.
+- **Refactor:** Updated API call wrappers (`generateWithGemini`, `generateWithOpenAI`, `generateWithAnthropic`) in `src/pages/api/generate-docs.ts` to align retry logic parameters (`retryDelayMs`) and correct function call structures.
+- **Chore:** Added status update file `.ai/status/2024-08-02.md`.
+- **Note:** A persistent TypeScript error remains in the Gemini API call within `src/pages/api/generate-docs.ts` after multiple fix attempts.

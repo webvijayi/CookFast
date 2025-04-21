@@ -5,7 +5,8 @@
 /**
  * Default timeout and retry settings
  */
-export const API_TIMEOUT_MS = 25000; // 25 seconds
+export const API_TIMEOUT_MS = 25000; // 25 seconds (for regular functions)
+export const BACKGROUND_API_TIMEOUT_MS = 840000; // 14 minutes (for background functions)
 export const MAX_RETRIES = 4; // Maximum number of retries for failed API calls
 export const RETRY_DELAY_MS = 1500; // Initial retry delay in milliseconds
 
@@ -45,33 +46,33 @@ export const withRetry = async <T>(
     retries?: number,
     retryDelayMs?: number,
     onRetry?: (attempt: number, error: Error, willRetry: boolean) => void,
-    timeoutMs?: number,
+    timeoutMs?: number, // Timeout for the specific operation
     errorMessage?: string,
-    shouldRetry?: (error: Error) => boolean
+    shouldRetry?: (error: Error) => boolean,
+    isBackground?: boolean // Flag to indicate if running in a background context
   } = {}
 ): Promise<T> => {
-  const { 
-    retries = MAX_RETRIES, 
+  console.log("[withRetry] Received options:", { retries: options.retries, retryDelayMs: options.retryDelayMs, timeoutMs: options.timeoutMs, isBackground: options.isBackground }); // Log received options
+  
+  const {
+    retries = MAX_RETRIES,
     retryDelayMs = RETRY_DELAY_MS,
     onRetry,
-    timeoutMs = API_TIMEOUT_MS,
+    // Use different default timeout based on context
+    timeoutMs = options.isBackground ? BACKGROUND_API_TIMEOUT_MS : API_TIMEOUT_MS,
     errorMessage = "Operation timed out",
     shouldRetry = (error: Error) => true // Default behavior: retry all errors
   } = options;
+  
+  console.log(`[withRetry] Calculated timeoutMs: ${timeoutMs}, isBackground: ${options.isBackground}`); // Log calculated timeout
   
   let lastError: Error = new Error("No error information available");
   
   // Try the operation multiple times
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      // Check if running in Netlify or other serverless environment
-      const isServerless = !!process.env.NETLIFY || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-      
-      // Use shorter timeouts for serverless environments
-      const adjustedTimeout = isServerless ? Math.min(timeoutMs, 25000) : timeoutMs;
-      
-      // Execute the function with a timeout
-      return await withTimeout(fn(), adjustedTimeout, errorMessage);
+      // Execute the function with the appropriate timeout
+      return await withTimeout(fn(), timeoutMs, errorMessage);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       

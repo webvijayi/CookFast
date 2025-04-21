@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState, Fragment, useEffect, useCallback } from 'react';
+import { useState, Fragment, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -209,52 +209,81 @@ const LinkIcon = ({ className = "h-5 w-5" }: SocialIconProps) => (
 // --- Section Components ---
 
 // ResultsPanel component to display generated documentation
-const ResultsPanel = ({ 
-  documentSections, 
-  generatedMarkdown, 
+const ResultsPanel = ({
+  documentSections,
+  generatedMarkdown,
   onDownload,
   onCopy,
   onDownloadJSON,
   onReset,
+  onRetry,
   theme,
-  debugInfo
-}: { 
+  debugInfo,
+  workPhase
+}: {
   documentSections: DocumentSection[] | undefined,
   generatedMarkdown: string | undefined,
   onDownload: () => void,
   onCopy: () => void,
   onDownloadJSON: (debugInfo: any) => void,
   onReset: () => void,
+  onRetry: () => void,
   theme?: string,
-  debugInfo?: any
+  debugInfo?: any,
+  workPhase: WorkPhase
 }) => {
   // Safety checks for missing data
   const hasDocumentSections = documentSections && Array.isArray(documentSections) && documentSections.length > 0;
   const hasGeneratedMarkdown = generatedMarkdown && generatedMarkdown.trim().length > 0;
+  const canRetry = workPhase === 'error' || workPhase === 'complete';
 
   return (
     <div className="container max-w-6xl mx-auto px-4 py-12">
       <div className="text-center mb-10">
-        <h2 className="text-3xl font-bold mb-4">Generated Documentation</h2>
-        <p className="text-muted-foreground">Your documentation has been successfully generated!</p>
+        <h2 className="text-3xl font-bold mb-4">
+          {workPhase === 'error' ? 'Generation Failed' : 'Generated Documentation'}
+        </h2>
+        <p className="text-muted-foreground">
+          {workPhase === 'error'
+            ? 'An error occurred during generation. You can try again.'
+            : 'Your documentation has been successfully generated!'}
+        </p>
       </div>
-      
+
       <div className="flex flex-col gap-6">
-        <div className="flex gap-4 justify-center">
-          <Button variant="outline" onClick={onDownload} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
-            Download Markdown
-          </Button>
-          <Button variant="outline" onClick={onCopy} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
-            Copy to Clipboard
-          </Button>
-          <Button variant="outline" onClick={() => onDownloadJSON(debugInfo)} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
-            Download as JSON
-          </Button>
+        <div className="flex gap-4 justify-center flex-wrap">
+          {hasGeneratedMarkdown && (
+            <>
+               <Button variant="outline" onClick={onDownload} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+                  Download Markdown
+               </Button>
+               <Button variant="outline" onClick={onCopy} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+                  Copy to Clipboard
+               </Button>
+               <Button variant="outline" onClick={() => onDownloadJSON(debugInfo)} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+                  Download as JSON
+               </Button>
+            </>
+          )}
+          {canRetry && (
+            <Button variant="secondary" onClick={onRetry}>
+              Retry Generation
+            </Button>
+          )}
           <Button variant="default" onClick={onReset}>
             Generate New Documentation
           </Button>
         </div>
-        
+
+        {workPhase === 'error' && !hasGeneratedMarkdown && (
+             <div className="text-center p-8 border rounded-lg border-destructive bg-destructive/10">
+               <p className="text-destructive">
+                 <AlertTriangleIcon className="inline h-5 w-5 mr-1" />
+                 Documentation generation failed. Please check the logs or try again.
+               </p>
+             </div>
+        )}
+
         {hasDocumentSections ? (
           <div className="w-full">
             <DocumentTabs
@@ -351,6 +380,9 @@ export default function CookFastHome() {
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<string | null>(null);
   const [generationStage, setGenerationStage] = useState('');
+
+  // Add AbortController and useRef for ongoing fetch request
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Add state to store actual provider/model used from API response
   const [actualProviderUsed, setActualProviderUsed] = useState<string | undefined>(undefined);
@@ -772,12 +804,113 @@ export default function CookFastHome() {
 
   // Reset state to generate a new document
   const handleReset = () => {
+    // Ensure any ongoing generation is stopped
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
     setGeneratedMarkdown('');
+    setDocumentSections([]); // Clear previous sections
     setResults(null);
     setWorkPhase('preparing');
     setActivePanel('intro');
     setError(null);
+    setIsGenerating(false); // Ensure generating state is reset
+    setGenerationProgress(0);
+    setElapsedTimeSeconds(0);
+    // Reset other relevant states if needed
     addDebugLog('Reset Form', { timestamp: new Date().toISOString() });
+  };
+
+  // --- Trigger Generation (Placeholder - Actual call likely in GeneratorSection) ---
+  // This function needs to be implemented/updated in GeneratorSection
+  // It should accept the AbortController signal
+  const triggerGeneration = async (signal: AbortSignal) => {
+     // Example: Replace with actual API call from GeneratorSection
+     console.log("Triggering generation with details:", projectDetails, selectedDocs, selectedProvider);
+     setIsGenerating(true);
+     setWorkPhase('generating');
+     setGenerationStartTime(Date.now());
+     addDebugLog('Generation Triggered (Placeholder)', { projectDetails, selectedDocs, provider: selectedProvider });
+
+     // Simulate generation process
+     await new Promise(resolve => setTimeout(resolve, 5000)); // Simulate delay
+
+     // Simulate success/error based on signal
+     if (signal.aborted) {
+       console.log("Generation aborted by signal.");
+       setError("Generation cancelled by user.");
+       setWorkPhase('error');
+       addDebugLog('Generation Aborted (Placeholder)');
+       setIsGenerating(false);
+       return; // Exit early if aborted
+     }
+
+     // Simulate receiving data (replace with actual API response handling)
+     const mockSections = [
+       { title: "Mock Section 1", content: "This is mock content." },
+       { title: "Mock Section 2", content: "More mock content." }
+     ];
+     const mockMarkdown = mockSections.map(s => `# ${s.title}\\n${s.content}`).join('\\n\\n');
+
+     // Dispatch success event (as the existing useEffect handles this)
+     document.dispatchEvent(new CustomEvent('cookfast:generationSuccess', {
+       detail: {
+         content: mockMarkdown,
+         sections: mockSections,
+         debug: { provider: selectedProvider, model: 'mock-model' }
+       }
+     }));
+
+     setIsGenerating(false); // Should be set false in handleGenerationSuccess ideally
+  };
+
+
+  // --- Stop Generation Handler ---
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      addDebugLog('Stop Generation Requested');
+      setWorkPhase('error'); // Or 'preparing' depending on desired state after stop
+      setIsGenerating(false);
+      setError('Generation stopped by user.');
+      // Reset progress, timers etc. if needed
+      setGenerationProgress(0);
+      setElapsedTimeSeconds(0);
+      setGenerationStartTime(null);
+    }
+  };
+
+
+  // --- Retry Generation Handler ---
+  const handleRetry = () => {
+    addDebugLog('Retry Generation Triggered');
+    // Reset generation-specific state before retrying
+    setGeneratedMarkdown('');
+    setDocumentSections([]);
+    setError(null);
+    setWorkPhase('preparing'); // Go back to preparing phase briefly
+    setIsGenerating(false); // Ensure this is false before starting again
+    setGenerationProgress(0);
+    setElapsedTimeSeconds(0);
+    setGenerationStartTime(null);
+    setActivePanel('docs'); // Or wherever generation is triggered from, likely 'docs' or the generator section itself
+
+    // Re-trigger generation (needs the actual trigger function)
+    // This assumes the generation logic is accessible here or can be triggered
+    // For now, using the placeholder:
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    triggerGeneration(controller.signal).catch(err => {
+       if (err.name !== 'AbortError') {
+          console.error("Retry Generation Error:", err);
+          setError(err.message || "An error occurred during retry.");
+          setWorkPhase('error');
+          setIsGenerating(false);
+          addDebugLog('Retry Generation Error', { error: err.message });
+       } else {
+          addDebugLog('Retry Generation Aborted');
+       }
+    });
   };
 
   // Handle document download
@@ -970,20 +1103,31 @@ export default function CookFastHome() {
       <HowItWorksSection />
       
       {/* Show Generator or Results */}
-      {activePanel === 'results' && (generatedMarkdown || (documentSections && documentSections.length > 0)) ? (
-        <ResultsPanel 
+      {activePanel === 'results' ? (
+        <ResultsPanel
           documentSections={documentSections}
           generatedMarkdown={generatedMarkdown}
           onDownload={handleDownload}
           onCopy={handleCopy}
           onDownloadJSON={downloadJSON}
           onReset={handleReset}
+          onRetry={handleRetry}
           theme={theme}
           debugInfo={debugInfo}
+          workPhase={workPhase}
         />
-      ) : (
-        <GeneratorSection />
-      )}
+      ) : activePanel === 'intro' || activePanel === 'details' || activePanel === 'docs' ? (
+          <>
+            {isGenerating && (
+              <div className="text-center my-4">
+                 <Button variant="destructive" onClick={handleStopGeneration}>
+                   Stop Generation
+                 </Button>
+              </div>
+            )}
+            <GeneratorSection />
+          </>
+      ) : null}
       
       <FaqSection />
 
