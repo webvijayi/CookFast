@@ -375,6 +375,15 @@ export default function GeneratorSection() {
           const statusData = await statusResponse.json();
           // Update with more specific information if we have it
           setGenerationStage(statusData.message || 'Request is being processed in the background.');
+          
+          // Check if result is already available
+          if (statusData.status === 'completed' && statusData.result) {
+            // We have results, let's process them
+            addDebugLog('Results found', { requestId, resultSize: JSON.stringify(statusData.result).length });
+            setGeneratedDocs(statusData.result);
+            setIsLoading(false);
+            return true;
+          }
         }
       } catch (statusError) {
         // Just log the error, but continue showing the background processing message
@@ -384,6 +393,10 @@ export default function GeneratorSection() {
       
       // Display background processing notice
       displayBackgroundProcessingNotice(requestId);
+      
+      // Schedule an immediate check for results in case they're available quickly
+      setTimeout(() => checkForResults(requestId), 2000);
+      
       setIsLoading(false); // Stop loading spinner
       
       return true;
@@ -392,6 +405,78 @@ export default function GeneratorSection() {
       setGenerationStage(`Error: ${error instanceof Error ? error.message : 'Unknown error during background processing'}`);
       addDebugLog('Background Processing Error', { requestId, error: error instanceof Error ? error.message : String(error) });
       setIsLoading(false);
+      return false;
+    }
+  };
+
+  // Check for completed results
+  const checkForResults = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/check-status?requestId=${requestId}`);
+      if (response.ok) {
+        const data = await response.json();
+        
+        // If we have results, update the UI
+        if (data.status === 'completed' && data.result) {
+          addDebugLog('Results found', { requestId, resultSize: JSON.stringify(data.result).length });
+          
+          // Process the results to ensure they're in the correct format
+          const processedResults = {
+            ...data.result,
+            // Ensure sections are properly formatted for the tabs display
+            sections: data.result.sections || [],
+            content: data.result.content || '',
+            debug: {
+              ...(data.result.debug || {}),
+              provider: data.result.debug?.provider || 'AI',
+              model: data.result.debug?.model || 'Unknown',
+              processingTimeMs: data.result.debug?.processingTimeMs || 0,
+              timestamp: data.result.debug?.timestamp || new Date().toISOString()
+            }
+          };
+          
+          // Update state with the processed results
+          setGeneratedDocs(processedResults);
+          setIsLoading(false);
+          
+          // Also notify parent components of success for ResultsPanel with tabs
+          const successEvent = new CustomEvent('cookfast:generationSuccess', {
+            detail: processedResults
+          });
+          document.dispatchEvent(successEvent);
+          
+          // Ensure the sections are correctly displayed in the UI
+          // This triggers any parent components to switch to the results panel
+          if (processedResults.sections && processedResults.sections.length > 0) {
+            const sectionsEvent = new CustomEvent('cookfast:sectionDisplay', {
+              detail: {
+                sections: processedResults.sections,
+                count: processedResults.sections.length
+              }
+            });
+            document.dispatchEvent(sectionsEvent);
+          }
+          
+          addDebugLog('Results processed and displayed', { 
+            sectionsCount: processedResults.sections?.length || 0,
+            contentLength: processedResults.content?.length || 0
+          });
+          
+          return true;
+        } else if (data.status === 'processing') {
+          // Update the UI with the current progress information if available
+          if (data.progress !== undefined) {
+            setGenerationStage(`Processing: ${data.message || 'Generating documents...'} (${data.progress}%)`);
+          }
+          
+          // Schedule another check in a few seconds
+          setTimeout(() => checkForResults(requestId), 5000);
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking for results:', error);
+      addDebugLog('Results Check Error', { requestId, error: error instanceof Error ? error.message : String(error) });
       return false;
     }
   };
@@ -667,43 +752,88 @@ export default function GeneratorSection() {
 
               {/* Success state with download options */}
               {!isLoading && generatedDocs && (
-                <div className="mt-8 p-6 border border-green-200 dark:border-green-900 rounded-lg bg-green-50 dark:bg-green-900/30">
-                  <div className="flex items-center mb-4">
-                    <svg className="h-6 w-6 text-green-600 dark:text-green-400 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <h3 className="font-medium text-lg text-green-700 dark:text-green-300">
-                      Documentation Generated Successfully!
-                    </h3>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-4 mt-4">
-                    <Button 
-                      onClick={handleDownloadJSON}
-                      className="bg-green-600 hover:bg-green-700 text-white flex items-center"
-                    >
-                      <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      Download JSON
-                    </Button>
-                    
-                    <Button 
-                      variant="outline"
-                      onClick={() => copyToClipboard(generatedDocs.content)}
-                      className="border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-800/50 flex items-center"
-                    >
-                      <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Copy to Clipboard
-                    </Button>
-                  </div>
-                  
-                  <div className="mt-4 text-sm text-green-600 dark:text-green-400">
-                    <p>Generated using {generatedDocs.debug?.provider || 'AI'} in {((generatedDocs.debug?.processingTimeMs || 0) / 1000).toFixed(2)} seconds</p>
-                    <p className="mt-1">Content length: {(generatedDocs.content?.length || 0).toLocaleString()} characters • {generatedDocs.sections?.length || 0} sections</p>
-                  </div>
+                <div className="mt-8 p-6 border rounded-lg">
+                  {/* Check if we have actual content */}
+                  {generatedDocs.content && generatedDocs.content.length > 0 && generatedDocs.sections && generatedDocs.sections.length > 0 ? (
+                    <>
+                      <div className="flex items-center mb-4 text-green-600 dark:text-green-400">
+                        <svg className="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <h3 className="font-medium text-lg text-green-700 dark:text-green-300">
+                          Documentation Generated Successfully!
+                        </h3>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-4 mt-4">
+                        <Button 
+                          onClick={handleDownloadJSON}
+                          className="bg-green-600 hover:bg-green-700 text-white flex items-center"
+                        >
+                          <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download JSON
+                        </Button>
+                        
+                        <Button 
+                          variant="outline"
+                          onClick={() => copyToClipboard(generatedDocs.content)}
+                          className="border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-800/50 flex items-center"
+                        >
+                          <svg className="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy to Clipboard
+                        </Button>
+                      </div>
+                      
+                      <div className="mt-4 text-sm text-green-600 dark:text-green-400">
+                        <p>Generated using {generatedDocs.debug?.provider || 'AI'} in {((generatedDocs.debug?.processingTimeMs || 0) / 1000).toFixed(2)} seconds</p>
+                        <p className="mt-1">Content length: {(generatedDocs.content?.length || 0).toLocaleString()} characters • {generatedDocs.sections?.length || 0} sections</p>
+                      </div>
+                    </>
+                  ) : generatedDocs.isBackgroundProcessing ? (
+                    // Show background processing message
+                    <div className="text-amber-600 dark:text-amber-400 p-4">
+                      <div className="flex items-center mb-3">
+                        <svg className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 className="font-medium text-lg">Background Processing In Progress</h3>
+                      </div>
+                      <p className="mb-3">Your request is being processed in the background. This may take several minutes depending on the complexity of your request.</p>
+                      <p className="text-sm">Request ID: <span className="font-mono bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded text-xs">{generatedDocs.requestId}</span></p>
+                      <div className="mt-4 flex justify-between items-center">
+                        <p className="text-sm">Waiting for results...</p>
+                        <div className="animate-spin h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full"></div>
+                      </div>
+                    </div>
+                  ) : (
+                    // Error or empty results state
+                    <div className="text-red-600 dark:text-red-400 p-4">
+                      <div className="flex items-center mb-3">
+                        <svg className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <h3 className="font-medium text-lg">No Content Generated</h3>
+                      </div>
+                      <p>The AI provider did not return any content. This could be due to an error or limitations with the provider.</p>
+                      <div className="mt-4">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setGeneratedDocs(null);
+                            setIsLoading(false);
+                            setGenerationStage('');
+                          }}
+                          className="border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-800/50"
+                        >
+                          Try Again
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

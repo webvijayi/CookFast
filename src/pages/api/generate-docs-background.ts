@@ -838,16 +838,24 @@ The documentation MUST include ALL requested document types, and each type shoul
               console.warn("Gemini fallback response.text() failed, trying manual extraction.", e);
               generatedContent = fallbackResult.response?.candidates?.[0]?.content?.parts?.map(part => part.text).join('') || '';
             }
-            
           } catch (fallbackModelError) {
-            // If both models fail, throw the fallback error
-            console.error(`Fallback Gemini model also failed: ${(fallbackModelError as Error).message}`);
+            // If both models fail, determine appropriate status code
+            let statusCode = 500;
+            const errorMessage = (fallbackModelError as Error).message?.toLowerCase();
             
-            // Background processing - log both models failed
-            console.error(`Both Gemini models failed for request ${generationId}. Error: ${(fallbackModelError as Error).message}`);
+            if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
+              statusCode = 401;
+            } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
+              statusCode = 429;
+            } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
+              statusCode = 400;
+            }
             
-            
-            throw fallbackModelError;
+            // Return error response 
+            return res.status(statusCode).json({ 
+              error: `Failed to generate documentation using ${provider}.`,
+              details: `API Error: ${(fallbackModelError as Error).message}` // Provide clearer error details
+            });
           }
         }
       } else {
@@ -856,23 +864,24 @@ The documentation MUST include ALL requested document types, and each type shoul
     } catch (error) {
       console.error(`Error generating content with ${provider}:`, error);
       apiError = error; // Store the error to return details later
-      // Set a generic error message, specific details might be sensitive
-      generatedContent = ''; // Ensure content is empty on error
+      
       // Determine appropriate status code
       let statusCode = 500;
       const errorMessage = (error as Error).message?.toLowerCase();
+      
       if (errorMessage?.includes('api key') || errorMessage?.includes('authentication')) {
         statusCode = 401;
       } else if (errorMessage?.includes('quota') || errorMessage?.includes('limit')) {
         statusCode = 429;
       } else if (errorMessage?.includes('not found') || errorMessage?.includes('invalid model')) {
-         statusCode = 400;
+        statusCode = 400;
       }
-      // Do not return immediately, proceed to send response outside this block
-       return res.status(statusCode).json({ 
-         error: `Failed to generate documentation using ${provider}.`,
-         details: `API Error: ${(error as Error).message}` // Provide clearer error details
-       });
+      
+      // Return error response 
+      return res.status(statusCode).json({ 
+        error: `Failed to generate documentation using ${provider}.`,
+        details: `API Error: ${(error as Error).message}` // Provide clearer error details
+      });
     }
 
     // Check if content generation failed silently or returned empty
@@ -911,6 +920,46 @@ The documentation MUST include ALL requested document types, and each type shoul
       sectionsCount: sections.length,
       contentLength: generatedContent.length
     });
+    
+    // Save the result for later retrieval by the check-status API
+    try {
+      // Create tmp directory if it doesn't exist
+      const fs = require('fs');
+      const path = require('path');
+      const tmpDir = path.join(process.cwd(), 'tmp');
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      
+      // Create the result data
+      const resultData = {
+        message: 'Documentation generated successfully',
+        content: generatedContent,
+        sections: sections,
+        debug: {
+          provider: actualProvider,
+          model: modelUsed,
+          timestamp: new Date().toISOString(),
+          contentLength: generatedContent.length,
+          processingTimeMs: processingTime,
+          sectionsCount: sections.length,
+          tokensUsed: finalUsage && {
+            input: finalUsage.input_tokens,
+            output: finalUsage.output_tokens,
+            cache_creation_input: finalUsage.cache_creation_input_tokens,
+            cache_read_input: finalUsage.cache_read_input_tokens,
+          }
+        }
+      };
+      
+      // Write result to file with requestId as filename
+      const resultPath = path.join(tmpDir, `${generationId}.json`);
+      fs.writeFileSync(resultPath, JSON.stringify(resultData, null, 2));
+      console.log(`Result saved to ${resultPath} for request ${generationId}`);
+    } catch (saveError) {
+      console.error(`Error saving result for ${generationId}:`, saveError);
+      // Continue even if saving fails - at least we have the result in memory
+    }
     
     // Always return a response, Netlify's runtime handles this correctly for background functions
     return res.status(200).json({
