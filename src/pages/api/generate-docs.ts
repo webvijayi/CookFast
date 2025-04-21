@@ -298,7 +298,8 @@ async function generateWithGemini(
   apiKey: string,
   modelName: string,
   prompt: string,
-  requestId: string
+  requestId: string,
+  isBackground: boolean
 ): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
   console.log(`[${requestId}] Attempting generation with Gemini model: ${modelName}`);
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -318,7 +319,8 @@ async function generateWithGemini(
       {
         retries: 2,
         retryDelayMs: 1500,
-        onRetry: (attempt, error) => console.warn(`[${requestId}] Gemini attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`)
+        onRetry: (attempt, error) => console.warn(`[${requestId}] Gemini attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
+        isBackground
       }
     );
 
@@ -377,7 +379,8 @@ async function generateWithGemini(
 async function generateWithOpenAI(
   apiKey: string,
   prompt: string,
-  requestId: string
+  requestId: string,
+  isBackground: boolean
 ): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
   console.log(`[${requestId}] Attempting generation with OpenAI model: ${OPENAI_MODEL}`);
   const openai = new OpenAI({ apiKey });
@@ -397,8 +400,8 @@ async function generateWithOpenAI(
       {
         retries: 2,
         retryDelayMs: 1500,
-        // Removed backoffFactor
-        onRetry: (attempt, error) => console.warn(`[${requestId}] OpenAI attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`)
+        onRetry: (attempt, error) => console.warn(`[${requestId}] OpenAI attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
+        isBackground
       }
     );
 
@@ -436,7 +439,8 @@ async function generateWithOpenAI(
 async function generateWithAnthropic(
   apiKey: string,
   prompt: string,
-  requestId: string
+  requestId: string,
+  isBackground: boolean
 ): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
   console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL}`);
   const anthropic = new Anthropic({ apiKey });
@@ -454,8 +458,8 @@ async function generateWithAnthropic(
       {
         retries: 2,
         retryDelayMs: 1500,
-        // Removed backoffFactor
-        onRetry: (attempt, error) => console.warn(`[${requestId}] Anthropic attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`)
+        onRetry: (attempt, error) => console.warn(`[${requestId}] Anthropic attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
+        isBackground
       }
     );
 
@@ -541,7 +545,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   }
 
   // Function to perform the generation logic
-  const performGeneration = async () => {
+  const performGeneration = async (isBackgroundFlag: boolean) => {
     const startTime = Date.now();
     let result: { content: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
     const prompt = buildPrompt(projectDetails, selectedDocs);
@@ -551,15 +555,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       if (provider === 'gemini') {
           // Try primary model first, then fallback
           try {
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId);
+            result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, isBackgroundFlag);
           } catch (primaryError: any) {
             console.warn(`[${requestId}] Gemini primary model (${GEMINI_MODELS.PRIMARY}) failed: ${primaryError.message}. Trying fallback...`);
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId);
+            result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, isBackgroundFlag);
           }
       } else if (provider === 'openai') {
-        result = await generateWithOpenAI(apiKey, prompt, requestId);
+        result = await generateWithOpenAI(apiKey, prompt, requestId, isBackgroundFlag);
       } else if (provider === 'anthropic') {
-        result = await generateWithAnthropic(apiKey, prompt, requestId);
+        result = await generateWithAnthropic(apiKey, prompt, requestId, isBackgroundFlag);
       } else {
         throw new Error('Invalid provider selected');
       }
@@ -618,7 +622,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   // Handle background vs immediate execution
   if (isBackground) {
     console.log(`[${requestId}] Processing request in background.`);
-    performGeneration().catch(err => {
+    performGeneration(isBackground).catch(err => {
        // Errors are saved within performGeneration, just log here if needed
        console.error(`[${requestId}] Background generation process failed: ${err.message}`);
     });
@@ -632,7 +636,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     // Process immediately and wait for the result
     console.log(`[${requestId}] Processing request immediately.`);
     try {
-      const resultData = await performGeneration();
+      const resultData = await performGeneration(isBackground);
       console.log(`[${requestId}] Immediate generation complete. Sending response.`);
       return res.status(200).json(resultData);
     } catch (error: any) {

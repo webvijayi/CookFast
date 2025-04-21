@@ -845,20 +845,10 @@
 - **Checked `.gitignore`:** Confirmed that the `tmp/` directory is ignored, preventing local results from being committed.
 - **Context:** This allows the document generation status check to function correctly during local development and testing where Netlify Blobs are not accessible.
 
-## ${new Date().toISOString()} - Fix Netlify 502 Error (Attempt 2) & Update OpenAI Model
+## ${new Date().toISOString()} - Fix Netlify Function Timeout for Background Execution
 
-- Modified `src/utils/saveResult.ts`:
-  - Changed logic to determine the temporary file path based on environment: uses `/tmp` directly when `process.env.NETLIFY === 'true'`, otherwise uses `path.join(process.cwd(), 'tmp')`.
-  - Ensured `fs.mkdir` is only called for the local path, as `/tmp` is guaranteed to exist in Netlify.
-  - This aims to resolve the persistent `ENOENT: no such file or directory, mkdir '/var/task/tmp'` error by correctly handling filesystem access in the Netlify environment regardless of Blob store availability.
 - Modified `src/pages/api/generate-docs.ts`:
-  - Updated `OPENAI_MODEL` constant from `"gpt-4o"` to `"gpt-4.1"` as requested.
-  - Updated `TOKEN_LIMITS.openai` from `16384` to `32768` to match GPT-4.1's maximum output tokens.
-  - Fixed a TypeScript error in the `generateWithGemini` function by correctly structuring the arguments passed to `model.generateContent`.
-
-## [2024-08-02]
-- **Feature:** Enhanced AI prompt in `src/pages/api/generate-docs.ts` to include more form fields (`targetAudience`, `userPersonas`, `projectDescription`, etc.) for richer context.
-- **Fix:** Relaxed frontend content validation in `src/components/GeneratorSection.tsx` (`handleSuccessfulResponse`) to display results even if content is short, preventing premature errors.
-- **Refactor:** Updated API call wrappers (`generateWithGemini`, `generateWithOpenAI`, `generateWithAnthropic`) in `src/pages/api/generate-docs.ts` to align retry logic parameters (`retryDelayMs`) and correct function call structures.
-- **Chore:** Added status update file `.ai/status/2024-08-02.md`.
-- **Note:** A persistent TypeScript error remains in the Gemini API call within `src/pages/api/generate-docs.ts` after multiple fix attempts.
+  - Updated `performGeneration` and the specific AI provider functions (`generateWithGemini`, `generateWithOpenAI`, `generateWithAnthropic`) to accept an `isBackground` boolean parameter.
+  - Ensured this `isBackground` flag is correctly passed down from the main handler function to the `withRetry` utility.
+  - **Issue:** The `withRetry` utility was not receiving the `isBackground` status, causing it to use the default (shorter) timeout even for background function invocations, leading to 10-second timeouts and 502 errors.
+  - **Fix:** By passing the `isBackground` flag, the `withRetry` utility can now correctly calculate and apply the appropriate timeout (10 seconds for synchronous, potentially up to 15 minutes for background), resolving the 502 errors caused by premature timeouts during longer AI generation tasks.
