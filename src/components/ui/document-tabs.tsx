@@ -22,6 +22,84 @@ const DocumentTabs = React.forwardRef<
   const [canScrollRight, setCanScrollRight] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<string | undefined>(defaultValue || sections[0]?.title);
 
+  // Add check for empty sections or error content
+  const validSections = React.useMemo(() => {
+    if (!sections || sections.length === 0) {
+      return [{
+        title: "Documentation Error",
+        content: (
+          <div className="p-4 rounded-md bg-red-50 border border-red-200">
+            <h3 className="text-red-800 font-medium mb-2">Documentation Error</h3>
+            <p className="text-red-700">No content was generated. Please try again with different settings or AI provider.</p>
+          </div>
+        )
+      }];
+    }
+    
+    // Improved content validation logic
+    const hasValidContent = sections.some(section => {
+      // If content is a string, check if it has non-whitespace content
+      if (typeof section.content === 'string') {
+        return section.content.trim().length > 0;
+      }
+      
+      // If content is a React element, consider it valid
+      if (React.isValidElement(section.content)) {
+        return true;
+      }
+      
+      // Handle cases where content is an object (like from JSON)
+      if (section.content && typeof section.content === 'object') {
+        // For objects that have a toString method or can be stringified
+        try {
+          const contentStr = String(section.content);
+          return contentStr && contentStr.trim().length > 0 && contentStr !== '[object Object]';
+        } catch (e) {
+          return false;
+        }
+      }
+      
+      return false;
+    });
+    
+    // Additional check for specific titles that indicate generated content
+    const hasRecognizedTitles = sections.some(section => {
+      const title = section.title?.toLowerCase() || '';
+      return title.includes('requirements') || 
+             title.includes('guidelines') || 
+             title.includes('structure') || 
+             title.includes('flow') || 
+             title.includes('technology') ||
+             title.includes('system') ||
+             title.includes('introduction');
+    });
+    
+    // Only show warning if both content and title checks fail
+    if (!hasValidContent && !hasRecognizedTitles) {
+      return [{
+        title: "Documentation Warning",
+        content: (
+          <div className="p-4 rounded-md bg-yellow-50 border border-yellow-200">
+            <h3 className="text-yellow-800 font-medium mb-2">Documentation Warning</h3>
+            <p className="text-yellow-700">No content provided. Please try regenerating the documentation.</p>
+          </div>
+        )
+      }];
+    }
+    
+    // Always log section info for debugging
+    if (typeof window !== 'undefined') {
+      console.log('Document sections:', sections.map(s => ({
+        title: s.title,
+        contentType: typeof s.content,
+        contentLength: typeof s.content === 'string' ? s.content.length : 'n/a'
+      })));
+    }
+    
+    // Return original sections if they have valid content or recognized titles
+    return sections;
+  }, [sections]);
+
   const checkScrollability = React.useCallback(() => {
     const scrollEl = scrollRef.current;
     if (scrollEl) {
@@ -36,7 +114,7 @@ const DocumentTabs = React.forwardRef<
     checkScrollability();
     window.addEventListener("resize", checkScrollability);
     return () => window.removeEventListener("resize", checkScrollability);
-  }, [checkScrollability, sections]);
+  }, [checkScrollability, validSections]); // Update dependency from sections to validSections
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -90,7 +168,7 @@ const DocumentTabs = React.forwardRef<
 
   return (
     <Tabs 
-      defaultValue={defaultValue || sections[0]?.title} 
+      defaultValue={defaultValue || validSections[0]?.title} // Use validSections instead of sections
       className={cn("w-full", className)} 
       {...props} 
       ref={ref}
@@ -122,7 +200,7 @@ const DocumentTabs = React.forwardRef<
               role="tablist"
               aria-orientation="horizontal"
             >
-              {sections.map((section) => (
+              {validSections.map((section) => ( // Use validSections instead of sections
                 <TabsTrigger 
                   key={section.title} 
                   value={section.title} 
@@ -150,7 +228,7 @@ const DocumentTabs = React.forwardRef<
         )}
       </div>
       
-      {sections.map((section) => (
+      {validSections.map((section) => ( // Use validSections instead of sections
         <TabsContent key={section.title} value={section.title} className="mt-4">
           {section.content}
         </TabsContent>

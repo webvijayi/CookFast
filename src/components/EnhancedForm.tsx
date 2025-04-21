@@ -387,6 +387,7 @@ export default function EnhancedForm({
                 ${keyValidationStatus === 'invalid' ? 'border-red-500 dark:border-red-600' : ''}
               `}
               placeholder={`Paste your ${selectedProvider.toUpperCase()} key`}
+              suppressHydrationWarning={true}
             />
             <button
               type="button"
@@ -433,6 +434,7 @@ export default function EnhancedForm({
           type="button"
           onClick={nextStep}
           className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors flex items-center"
+          suppressHydrationWarning={true}
         >
           Next
           <svg className="ml-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

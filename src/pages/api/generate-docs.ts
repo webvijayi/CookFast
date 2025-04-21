@@ -1,11 +1,14 @@
 /* eslint-disable */
 // Timestamp: ${new Date().toISOString()} - Improved API implementation with error handling and response processing
 // Timestamp: ${new Date().toISOString()} - Updated Anthropic model to 3.7 Sonnet and adjusted token limit
+// Timestamp: ${new Date().toISOString()} - Updated to use centralized retry utility functions
+// Timestamp: 2025-06-05T00:00:00.000Z - Removed duplicated utility functions and using centralized imports
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { MessageStreamEvent } from '@anthropic-ai/sdk/resources/messages'; // Import MessageStreamEvent
+import { withTimeout, withRetry, API_TIMEOUT_MS as DEFAULT_API_TIMEOUT_MS, MAX_RETRIES, RETRY_DELAY_MS } from '@/utils';
 
 // For environments that have issues with the native fetch implementation
 import fetch from 'cross-fetch';
@@ -14,7 +17,7 @@ global.fetch = fetch;
 // Add custom type for Gemini response part
 type GeminiPart = string | { text?: string; [key: string]: any };
 
-// Default timeout for API requests (30 seconds)
+// Custom timeout for the non-background endpoint (longer than the default)
 const API_TIMEOUT_MS = 120000; // 2 minutes
 
 // Interfaces
@@ -93,24 +96,6 @@ const TOKEN_LIMITS = {
   gemini: 65536, // Gemini 2.5 Pro output token limit (input limit: 1,048,576)
   openai: 16384, // GPT-4.1 output token limit (input limit: 1,047,576)
   anthropic: 64000 // Claude 3.7 Sonnet output token limit (input limit: 200,000)
-};
-
-// Helper function to create a timeout promise
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
-  let timeoutId: NodeJS.Timeout;
-  
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(errorMessage));
-    }, timeoutMs);
-  });
-
-  return Promise.race([
-    promise,
-    timeoutPromise
-  ]).finally(() => {
-    clearTimeout(timeoutId);
-  });
 };
 
 // Create a simple rate limiter
@@ -760,7 +745,7 @@ The documentation MUST include ALL requested document types, and each type shoul
             }),
             // Extended timeout of 10 minutes for background processing
             600000,
-            `Gemini API request timed out after 10 minutes`
+            `Gemini API request timed out`
           );
           
           // Background processing - log progress
@@ -808,7 +793,7 @@ The documentation MUST include ALL requested document types, and each type shoul
               }),
               // Extended timeout of 10 minutes for background processing
               600000,
-              `Gemini fallback API request timed out after 10 minutes`
+              `Gemini fallback API request timed out`
             );
             
             // Background processing - log fallback progress
