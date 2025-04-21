@@ -108,7 +108,14 @@ interface GeneratedDocumentation {
     contentLength: number;
     processingTimeMs: number;
     sectionsCount?: number;
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total?: number;
+    };
   };
+  isBackgroundProcessing?: boolean;
+  requestId?: string;
 }
 
 // The main generator section with the form interface
@@ -271,7 +278,10 @@ export default function GeneratorSection() {
       if (response.status === 202) {
         // This is the expected status for background functions
         setGenerationStage('Request accepted - Processing in background (this may take a few minutes)...');
-        addDebugLog('Background Processing Started', { requestId, status: response.status });
+        addDebugLog('Background Processing Started', { requestId, status: response.status, provider });
+        
+        // Display the background processing notice with the correct provider
+        displayBackgroundProcessingNotice(requestId, provider);
         
         // Start polling for completion
         await pollForCompletion(requestId);
@@ -570,7 +580,7 @@ export default function GeneratorSection() {
   };
 
   // Display background processing notice to the user
-  const displayBackgroundProcessingNotice = (requestId: string) => {
+  const displayBackgroundProcessingNotice = (requestId: string, provider: string = 'gemini') => {
     // Create a user-friendly message for background processing
     const backgroundMessage = (
       <div className="mt-6 bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-foreground">
@@ -608,8 +618,8 @@ export default function GeneratorSection() {
       content: backgroundMessage, // Store the JSX content directly
       sections: [],
       debug: {
-        provider: 'background',
-        model: 'background-processing',
+        provider: provider, // Use the actual selected provider
+        model: provider, // Keep the model name same as provider name
         timestamp: new Date().toISOString(),
         contentLength: 0,
         processingTimeMs: 0

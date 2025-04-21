@@ -937,7 +937,10 @@ The documentation MUST include ALL requested document types, and each type shoul
       // Create tmp directory if it doesn't exist
       const fs = require('fs');
       const path = require('path');
-      const tmpDir = path.join(process.cwd(), 'tmp');
+      // Use the OS tmp directory in serverless environments, otherwise use a local tmp directory
+      const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+      const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+      
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
       }
