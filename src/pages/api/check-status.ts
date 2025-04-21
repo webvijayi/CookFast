@@ -5,7 +5,11 @@ import path from 'path';
 // Local document store function (simplified version from documentStore.ts)
 async function getDocumentFromStore(requestId: string): Promise<any | null> {
   try {
-    const filePath = path.join(process.cwd(), 'tmp', `${requestId}.json`);
+    // Use the OS tmp directory in serverless environments, otherwise use a local tmp directory
+    const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+    const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+    const filePath = path.join(tmpDir, `${requestId}.json`);
+    
     if (fs.existsSync(filePath)) {
       const content = fs.readFileSync(filePath, 'utf8');
       return JSON.parse(content);
@@ -79,12 +83,24 @@ export default async function handler(
       if (document) {
         console.log(`Found results for request ${requestId}`);
         
+        // Extract token usage if available
+        const tokenInfo = document?.debug?.tokensUsed || {
+          input: 0,
+          output: 0,
+          total: 0
+        };
+        
+        // Log the token usage for monitoring
+        console.info(`[STATUS] Found completed results for request ${requestId} - TokensUsed: Input=${tokenInfo.input}, Output=${tokenInfo.output}, Total=${tokenInfo.total}`);
+        
         // Return the completed results with proper headers for caching
         res.setHeader('Cache-Control', 'private, max-age=60');
         return res.status(200).json({
           status: 'completed',
           message: 'Document generation completed successfully.',
-          result: document
+          result: document,
+          tokensUsed: tokenInfo,
+          processingTimeMs: document?.debug?.processingTimeMs || 0
         });
       }
       
@@ -99,7 +115,10 @@ export default async function handler(
     // If we couldn't find results, try to create a tmp directory if it doesn't exist yet
     // This helps with local development
     try {
-      const tmpDir = path.join(process.cwd(), 'tmp');
+      // Use the OS tmp directory in serverless environments, otherwise use a local tmp directory
+      const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY;
+      const tmpDir = isServerless ? '/tmp' : path.join(process.cwd(), 'tmp');
+      
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
         console.log('Created tmp directory for document storage');

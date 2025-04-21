@@ -412,13 +412,33 @@ export default function GeneratorSection() {
   // Check for completed results
   const checkForResults = async (requestId: string) => {
     try {
+      // Update UI to show we're checking status
+      setGenerationStage(prevStage => 
+        prevStage.includes('Checking status') ? prevStage : `${prevStage} (Checking status...)`
+      );
+      
       const response = await fetch(`/api/check-status?requestId=${requestId}`);
       if (response.ok) {
         const data = await response.json();
         
+        // Get any available token usage information
+        const tokensUsed = data.tokensUsed || {
+          input: 0,
+          output: 0,
+          total: 0
+        };
+        
         // If we have results, update the UI
         if (data.status === 'completed' && data.result) {
-          addDebugLog('Results found', { requestId, resultSize: JSON.stringify(data.result).length });
+          addDebugLog('Results found', { 
+            requestId, 
+            resultSize: JSON.stringify(data.result).length,
+            tokensUsed,
+            processingTimeMs: data.processingTimeMs || 0
+          });
+          
+          // Log token usage to console for debugging
+          console.log(`Document generation completed - Tokens used: Input=${tokensUsed.input}, Output=${tokensUsed.output}, Total=${tokensUsed.total}`);
           
           // Process the results to ensure they're in the correct format
           const processedResults = {
@@ -430,24 +450,28 @@ export default function GeneratorSection() {
               ...(data.result.debug || {}),
               provider: data.result.debug?.provider || 'AI',
               model: data.result.debug?.model || 'Unknown',
-              processingTimeMs: data.result.debug?.processingTimeMs || 0,
-              timestamp: data.result.debug?.timestamp || new Date().toISOString()
+              processingTimeMs: data.processingTimeMs || data.result.debug?.processingTimeMs || 0,
+              timestamp: data.result.debug?.timestamp || new Date().toISOString(),
+              tokensUsed: tokensUsed
             }
           };
           
-          // Update state with the processed results
-          setGeneratedDocs(processedResults);
-          setIsLoading(false);
-          
-          // Also notify parent components of success for ResultsPanel with tabs
-          const successEvent = new CustomEvent('cookfast:generationSuccess', {
-            detail: processedResults
-          });
-          document.dispatchEvent(successEvent);
-          
-          // Ensure the sections are correctly displayed in the UI
-          // This triggers any parent components to switch to the results panel
-          if (processedResults.sections && processedResults.sections.length > 0) {
+          // Check for valid content before updating state
+          if (processedResults.content && processedResults.content.length > 0 && 
+              processedResults.sections && processedResults.sections.length > 0) {
+            
+            // Content is valid - update state with the processed results
+            setGeneratedDocs(processedResults);
+            setIsLoading(false);
+            
+            // Also notify parent components of success for ResultsPanel with tabs
+            const successEvent = new CustomEvent('cookfast:generationSuccess', {
+              detail: processedResults
+            });
+            document.dispatchEvent(successEvent);
+            
+            // Ensure the sections are correctly displayed in the UI
+            // This triggers any parent components to switch to the results panel
             const sectionsEvent = new CustomEvent('cookfast:sectionDisplay', {
               detail: {
                 sections: processedResults.sections,
@@ -455,28 +479,92 @@ export default function GeneratorSection() {
               }
             });
             document.dispatchEvent(sectionsEvent);
+            
+            addDebugLog('Results processed and displayed', { 
+              sectionsCount: processedResults.sections?.length || 0,
+              contentLength: processedResults.content?.length || 0,
+              tokensUsed: tokensUsed
+            });
+            
+            return true;
+          } else {
+            // Content is empty or invalid - update the UI and continue polling
+            addDebugLog('Empty or invalid results received', {
+              contentLength: processedResults.content?.length || 0,
+              sectionsCount: processedResults.sections?.length || 0
+            });
+            
+            // Keep the background processing state but update with the latest info
+            const updatedDocs = {
+              ...generatedDocs,
+              debug: {
+                ...(generatedDocs?.debug || {}),
+                provider: data.result?.debug?.provider || generatedDocs?.debug?.provider || 'Unknown',
+                model: data.result?.debug?.model || generatedDocs?.debug?.model || 'Unknown',
+                tokensUsed: tokensUsed
+              }
+            };
+            
+            setGeneratedDocs(updatedDocs);
+            
+            // Continue checking since no valid content yet
+            setTimeout(() => checkForResults(requestId), 5000);
+            return false;
+          }
+        } else if (data.status === 'processing') {
+          // Update the background processing info with any new details
+          if (generatedDocs && generatedDocs.isBackgroundProcessing) {
+            const updatedDocs = {
+              ...generatedDocs,
+              debug: {
+                ...(generatedDocs.debug || {}),
+                provider: data.provider || generatedDocs.debug?.provider,
+                model: data.model || generatedDocs.debug?.model,
+                tokensUsed: {
+                  input: tokensUsed.input,
+                  output: tokensUsed.output,
+                  total: tokensUsed.total
+                },
+                // Update timestamp to show when we last checked
+                lastChecked: new Date().toISOString()
+              }
+            };
+            setGeneratedDocs(updatedDocs);
           }
           
-          addDebugLog('Results processed and displayed', { 
-            sectionsCount: processedResults.sections?.length || 0,
-            contentLength: processedResults.content?.length || 0
-          });
-          
-          return true;
-        } else if (data.status === 'processing') {
           // Update the UI with the current progress information if available
           if (data.progress !== undefined) {
             setGenerationStage(`Processing: ${data.message || 'Generating documents...'} (${data.progress}%)`);
+          } else {
+            setGenerationStage(data.message || 'Your document is being generated in the background...');
           }
+          
+          addDebugLog('Still processing', { 
+            requestId, 
+            timestamp: data.timestamp || new Date().toISOString() 
+          });
           
           // Schedule another check in a few seconds
           setTimeout(() => checkForResults(requestId), 5000);
         }
+      } else {
+        // Non-200 response - log the error and continue checking
+        console.warn(`Non-OK response when checking status: ${response.status} ${response.statusText}`);
+        addDebugLog('Status check returned non-OK response', {
+          status: response.status,
+          statusText: response.statusText
+        });
+        
+        // Continue polling despite the error
+        setTimeout(() => checkForResults(requestId), 5000);
       }
       return false;
     } catch (error) {
       console.error('Error checking for results:', error);
       addDebugLog('Results Check Error', { requestId, error: error instanceof Error ? error.message : String(error) });
+      
+      // Continue polling despite the error
+      setTimeout(() => checkForResults(requestId), 5000);
       return false;
     }
   };
@@ -795,18 +883,46 @@ export default function GeneratorSection() {
                     </>
                   ) : generatedDocs.isBackgroundProcessing ? (
                     // Show background processing message
-                    <div className="text-amber-600 dark:text-amber-400 p-4">
+                    <div className="text-amber-600 dark:text-amber-400 p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50 dark:bg-amber-900/20">
                       <div className="flex items-center mb-3">
                         <svg className="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <h3 className="font-medium text-lg">Background Processing In Progress</h3>
                       </div>
+                      
+                      <div className="mb-4 p-3 bg-amber-100 dark:bg-amber-900/40 rounded border border-amber-200 dark:border-amber-800/50">
+                        <p className="mb-2 font-medium">Status:</p>
+                        <ul className="list-disc pl-5 space-y-1 text-sm">
+                          <li>AI Provider: <span className="font-medium">{generatedDocs.debug?.provider || 'AI'}</span></li>
+                          <li>Model: <span className="font-medium">{generatedDocs.debug?.model || 'Unknown model'}</span></li>
+                          <li>Request started: <span className="font-medium">{new Date(generatedDocs.debug?.timestamp || Date.now()).toLocaleTimeString()}</span></li>
+                          {generatedDocs.debug?.tokensUsed && (
+                            <li>
+                              Tokens: <span className="font-medium">
+                                {generatedDocs.debug.tokensUsed.input || 0} input / {generatedDocs.debug.tokensUsed.output || 0} output
+                              </span>
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                      
                       <p className="mb-3">Your request is being processed in the background. This may take several minutes depending on the complexity of your request.</p>
-                      <p className="text-sm">Request ID: <span className="font-mono bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded text-xs">{generatedDocs.requestId}</span></p>
-                      <div className="mt-4 flex justify-between items-center">
-                        <p className="text-sm">Waiting for results...</p>
-                        <div className="animate-spin h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full"></div>
+                      <p className="mb-2 text-sm">Request ID: <span className="font-mono bg-amber-100 dark:bg-amber-900/30 px-1 py-0.5 rounded text-xs">{generatedDocs.requestId}</span></p>
+                      
+                      <div className="mt-4 flex justify-between items-center pt-3 border-t border-amber-200 dark:border-amber-700/50">
+                        <div>
+                          <p className="text-sm font-medium">Waiting for results...</p>
+                          <p className="text-xs">Auto-checking status every 5 seconds</p>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="text-xs mr-2">Checking</div>
+                          <div className="animate-spin h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 text-xs text-amber-500 dark:text-amber-400">
+                        <p>Netlify background functions can take up to 15 minutes to complete. Results will appear automatically when ready.</p>
                       </div>
                     </div>
                   ) : (

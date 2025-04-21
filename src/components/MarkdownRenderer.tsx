@@ -1,8 +1,10 @@
-// Timestamp: ${new Date().toISOString()} - Enhanced MarkdownRenderer component with better error handling, layout improvements, and added copy button functionality.
+// Timestamp: 2025-04-21T06:00:00Z - Enhanced MarkdownRenderer component with better error handling, layout improvements, and added copy button functionality with Mermaid diagram support.
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+// Import types but not the actual module (will be dynamically imported)
+import type { MermaidConfig } from 'mermaid';
 
 interface MarkdownRendererProps {
   content: string;
@@ -16,6 +18,86 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [contentStatus, setContentStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
+  // Function to initialize and render Mermaid diagrams
+  const initMermaid = async (): Promise<void> => {
+    if (typeof window === 'undefined' || !markdownRef.current) return; // Skip on server or if no ref
+
+    try {
+      // Dynamically import mermaid only on client side
+      const mermaid = await import('mermaid');
+      
+      // Initialize mermaid with theme based on dark mode
+      mermaid.default.initialize({
+        startOnLoad: false,
+        theme: isDarkMode ? 'dark' : 'default',
+        securityLevel: 'loose',
+        logLevel: 3, // Warning level for better debugging
+        fontFamily: 'inherit', // Use the app's font
+        flowchart: {
+          htmlLabels: true,
+          curve: 'basis'
+        },
+        sequence: {
+          diagramMarginX: 50,
+          diagramMarginY: 10,
+          actorMargin: 50,
+          width: 150,
+          height: 65,
+          boxMargin: 10,
+          boxTextMargin: 5,
+          noteMargin: 10,
+          messageMargin: 35
+        }
+      } as MermaidConfig);
+      
+      mermaidInitialized.current = true;
+      
+      // Find all mermaid code blocks
+      const mermaidElements = markdownRef.current.querySelectorAll<HTMLElement>('pre > code.language-mermaid');
+      console.log(`Found ${mermaidElements.length} Mermaid diagram blocks to render`);
+      
+      // Process each mermaid diagram
+      for (let i = 0; i < mermaidElements.length; i++) {
+        const el = mermaidElements[i];
+        try {
+          // Create a container to render the diagram
+          const container = document.createElement('div');
+          container.className = 'mermaid-diagram my-4 bg-white dark:bg-gray-900 p-2 rounded-lg overflow-auto';
+          container.id = `mermaid-diagram-${i}-${Date.now()}`;
+          container.textContent = el.textContent || '';
+          
+          // Replace the code block with the container
+          const preElement = el.parentElement;
+          if (preElement?.parentElement) {
+            preElement.parentElement.replaceChild(container, preElement);
+            
+            // Try to render the diagram with mermaid
+            try {
+              await mermaid.default.run({
+                nodes: [container],
+                suppressErrors: false
+              });
+              console.log(`Successfully rendered diagram ${i}`);
+            } catch (renderError: unknown) {
+              console.error(`Error rendering mermaid diagram ${i}:`, renderError);
+              container.innerHTML = `<div class="p-4 border border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md">
+                <p class="text-red-600 dark:text-red-400 font-medium">Diagram Error:</p>
+                <pre class="mt-2 text-xs overflow-auto">${renderError instanceof Error ? renderError.message : String(renderError)}</pre>
+                <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Original code:</div>
+                <pre class="mt-1 text-xs overflow-auto">${el.textContent}</pre>
+              </div>`;
+            }
+          }
+        } catch (error: unknown) {
+          console.error('Error processing mermaid diagram:', error);
+        }
+      }
+    } catch (error: unknown) {
+      console.error('Error loading mermaid library:', error);
+      setRenderError(`Failed to load mermaid library: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   useEffect(() => {
     // Check content validity
     if (!content) {
@@ -24,86 +106,27 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
       return;
     }
 
-    // Remove the length check, as it incorrectly flags valid sections as incomplete.
-    // Completeness check should happen at a higher level based on the overall API response.
-    // if (content.length < 2000) {
-    //   setContentStatus('error');
-    //   setRenderError('Content appears incomplete. The AI may have generated only an outline instead of full documentation. Please try regenerating with different settings.');
-    // } else {
-    //   setContentStatus('ready');
-    //   setRenderError(null);
-    // }
     setContentStatus('ready'); // Assume content is ready if provided
     setRenderError(null);
 
-    // Only run in browser environment
-    if (typeof window === 'undefined') return;
-
-    // Import and initialize mermaid on the client side
-    const initMermaid = async () => {
-      try {
-        // Dynamically import mermaid only on client side
-        const mermaid = await import('mermaid');
-        
-        // Initialize mermaid only once
-        if (!mermaidInitialized.current) {
-          mermaid.default.initialize({
-            startOnLoad: false,
-            theme: isDarkMode ? 'dark' : 'default',
-            securityLevel: 'loose',
-            logLevel: 4, // Error level only to reduce console noise
-            fontFamily: 'inherit', // Use the app's font
-          });
-          mermaidInitialized.current = true;
-        }
-
-        // Render any unprocessed mermaid diagrams
-        if (markdownRef.current) {
-          const mermaidElements = markdownRef.current.querySelectorAll<HTMLElement>('code.language-mermaid');
-          const unprocessedElements = Array.from(mermaidElements).filter(el => el.getAttribute('data-processed') !== 'true');
-
-          if (unprocessedElements.length > 0) {
-            try {
-              await mermaid.default.run({ nodes: unprocessedElements });
-              console.log(`Successfully rendered ${unprocessedElements.length} Mermaid diagrams`);
-            } catch (error) {
-              console.error('Mermaid rendering error:', error);
-              setRenderError(`Failed to render diagrams: ${error instanceof Error ? error.message : String(error)}`);
-              unprocessedElements.forEach(el => {
-                // Add error styling to failed diagrams
-                el.innerHTML = `<div class="p-4 border border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md">
-                  <p class="text-red-600 dark:text-red-400 font-medium">Diagram Error:</p>
-                  <pre class="mt-2 text-xs overflow-auto">${error instanceof Error ? error.message : String(error)}</pre>
-                  <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Original code:</div>
-                  <pre class="mt-1 text-xs overflow-auto">${el.textContent}</pre>
-                </div>`;
-                el.setAttribute('data-processed', 'true');
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to initialize or render mermaid:", error);
-        setRenderError(`Failed to load diagram renderer: ${error instanceof Error ? error.message : String(error)}`);
+    // Schedule mermaid initialization after component mounts/updates
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined' && markdownRef.current) {
+        initMermaid();
       }
-    };
+    }, 300); // Small delay to ensure DOM is ready
 
-    // Run after a short delay to ensure DOM is ready
-    const timerId = setTimeout(() => {
-      initMermaid();
-    }, 100);
-
-    return () => clearTimeout(timerId);
-  }, [content, isDarkMode]); // Rerun effect if content or theme changes
+    return () => clearTimeout(timer);
+  }, [content, isDarkMode]); // Re-run when content or theme changes
 
   // Handle copy button click
-  const handleCopyCode = (code: string, index: number) => {
+  const handleCopyCode = (code: string, index: number): void => {
     navigator.clipboard.writeText(code).then(
       () => {
         setCopiedIndex(index);
         setTimeout(() => setCopiedIndex(null), 2000);
       },
-      (err) => {
+      (err: unknown) => {
         console.error('Failed to copy text: ', err);
       }
     );
@@ -144,8 +167,30 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
       
       // Special handling for mermaid
       if (language === 'mermaid') {
-        // Render mermaid code blocks simply, let useEffect handle rendering
-        return <code className={className} {...props}>{children}</code>;
+        // Extract diagram type for better labeling
+        const codeText = String(children);
+        let diagramType = "Diagram";
+        if (codeText.trim().startsWith('sequenceDiagram')) {
+          diagramType = "Sequence Diagram";
+        } else if (codeText.trim().startsWith('flowchart') || codeText.trim().startsWith('graph')) {
+          diagramType = "Flowchart";
+        } else if (codeText.trim().startsWith('classDiagram')) {
+          diagramType = "Class Diagram";
+        } else if (codeText.trim().startsWith('erDiagram')) {
+          diagramType = "ER Diagram";
+        }
+        
+        // Render mermaid code blocks within a labeled container for better user feedback
+        return (
+          <div className="relative my-4">
+            <div className="absolute top-0 right-0 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs px-2 py-1 rounded-bl">
+              {diagramType}
+            </div>
+            <pre className="overflow-auto rounded-md p-4 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
+              <code className={className} {...props}>{children}</code>
+            </pre>
+          </div>
+        );
       }
       
       // Extract code content

@@ -908,18 +908,29 @@ The documentation MUST include ALL requested document types, and each type shoul
     // See: https://docs.netlify.com/functions/background-functions/
     
     // Log the completion for monitoring in the Netlify function logs
-    console.log(`Background processing completed for ${generationId}. Response length: ${generatedContent.length} chars`);  
+    console.info(`[COMPLETE] Background processing completed for ${generationId}. Response length: ${generatedContent.length} chars`);  
     
-    // Store result metrics for debugging
-    console.log({
+    // Store detailed metrics for debugging - this appears in the Netlify function logs
+    console.log(JSON.stringify({
+      status: 'success',
       message: 'Documentation generated successfully',
       requestId: generationId,
       provider: actualProvider,
       model: modelUsed,
       processingTimeMs: processingTime,
       sectionsCount: sections.length,
-      contentLength: generatedContent.length
-    });
+      contentLength: generatedContent.length,
+      tokensUsed: finalUsage && {
+        input: finalUsage.input_tokens || 0,
+        output: finalUsage.output_tokens || 0,
+        total: (finalUsage.input_tokens || 0) + (finalUsage.output_tokens || 0),
+      }
+    }, null, 2));
+
+    // Log token usage specifically for easier grep filtering
+    if (finalUsage) {
+      console.info(`[TOKENS] Request ${generationId}: Input=${finalUsage.input_tokens || 0}, Output=${finalUsage.output_tokens || 0}, Total=${(finalUsage.input_tokens || 0) + (finalUsage.output_tokens || 0)}`);
+    }
     
     // Save the result for later retrieval by the check-status API
     try {
