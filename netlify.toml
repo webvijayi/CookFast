@@ -26,13 +26,11 @@
   # Next.js API routes are stored in src/pages/api, but Netlify expects them in netlify/functions
   directory = "src/pages/api"
   node_bundler = "esbuild"
-  # Use Node.js 18.x to support all modern JavaScript features
-  node_version = "18.x"
+  # Note: Node.js version is set via environment variable in Netlify UI
 
 # Configure generate-docs as a background function
 [functions."generate-docs"]
   node_bundler = "esbuild"
-  node_version = "18.x"
   background = true
 
 # Edge Function configuration for Open Graph image generation

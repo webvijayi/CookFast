@@ -635,41 +635,66 @@ export default function GeneratorSection() {
         </Card>
 
         {/* Social Sharing Section */}
-        <div className="mt-12 text-center">
-            <h3 className="text-lg font-semibold mb-4">Like CookFast? Share it!</h3>
-            <div className="flex justify-center gap-3">
-                {/* Twitter/X */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('x')} aria-label="Share on X">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13.6823 10.6218L20.2391 3H18.6854L12.9921 9.61788L8.44486 3H3.2002L10.0765 13.0074L3.2002 21H4.75404L10.7663 14.0113L15.5549 21H20.7996L13.6819 10.6218H13.6823ZM11.5541 13.0956L10.8574 12.0991L5.31391 4.16971H7.70053L12.1742 10.5689L12.8709 11.5655L18.6861 19.8835H16.2995L11.5541 13.096V13.0956Z" /></svg>
+        <div className="mt-12 p-6 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl shadow-sm">
+            <h3 className="text-xl font-semibold mb-4 text-center flex justify-center items-center">
+                <ShareIcon className="mr-2 h-5 w-5" /> Share CookFast
+            </h3>
+            <p className="text-muted-foreground text-center mb-6">
+                Found CookFast helpful? Share it with your network! 🚀
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('x')}
+                >
+                  <TwitterIcon className="mr-2" /> Twitter
                 </Button>
-                {/* Facebook */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('facebook')} aria-label="Share on Facebook">
-                    <FacebookIcon className="h-5 w-5" />
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('facebook')}
+                >
+                  <FacebookIcon className="mr-2" /> Facebook
                 </Button>
-                {/* WhatsApp */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('whatsapp')} aria-label="Share on WhatsApp">
-                    <WhatsAppIcon className="h-5 w-5" />
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('whatsapp')}
+                >
+                  <WhatsAppIcon className="mr-2" /> WhatsApp
                 </Button>
-                {/* Telegram */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('telegram')} aria-label="Share on Telegram">
-                    <TelegramIcon className="h-5 w-5" />
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('telegram')}
+                >
+                  <TelegramIcon className="mr-2" /> Telegram
                 </Button>
-                 {/* LinkedIn */}
-                <Button variant="outline" size="icon" onClick={() => {/* Add LinkedIn share handler */}} aria-label="Share on LinkedIn">
-                   <LinkedInIcon className="h-5 w-5" />
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('email')}
+                >
+                  <EmailIcon className="mr-2" /> Email
                 </Button>
-                {/* Email */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('email')} aria-label="Share via Email">
-                    <EmailIcon className="h-5 w-5" />
-                </Button>
-                {/* Copy Link */}
-                <Button variant="outline" size="icon" onClick={() => handleShare('link')} aria-label="Copy Link">
-                    <LinkIcon className="h-5 w-5" />
+                <Button
+                  variant="outline"
+                  className="bg-background hover:bg-muted flex items-center"
+                  size="sm"
+                  onClick={() => handleShare('link')}
+                >
+                  <LinkIcon className="mr-2" /> Copy Link
                 </Button>
             </div>
           {/* Copy Notification */}
           {showCopyNotification && (
-                <p className="text-sm text-green-600 mt-2">Link copied to clipboard!</p>
+                <p className="text-sm text-green-600 mt-2 text-center">Link copied to clipboard!</p>
           )}
         </div>
       </div>
