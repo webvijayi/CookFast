@@ -25,6 +25,14 @@
 [functions]
   # Next.js API routes are stored in src/pages/api, but Netlify expects them in netlify/functions
   directory = "src/pages/api"
+  node_bundler = "esbuild"
+
+# Configure background functions for API calls that may take longer than 10 seconds
+[functions."generate-docs"]
+  background = true
+
+[functions."generate-docs-background"]
+  background = true
 
 # Edge Function configuration for Open Graph image generation
 [[edge_functions]]
