@@ -6,6 +6,7 @@
 // Timestamp: ${new Date().toISOString()} - Updated to use centralized retry utility functions
 // Timestamp: 2023-11-20T00:00:00.000Z - Fixed compatibility with Netlify background functions
 // Timestamp: 2023-11-21T00:00:00.000Z - Fixed 502 error by correctly implementing background function pattern
+// Timestamp: ${new Date().toISOString()} - Updated OpenAI model to gpt-4.1 and increased token limit
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerateContentCandidate, GenerateContentResponse } from '@google/generative-ai';
 import OpenAI from 'openai';
@@ -64,7 +65,7 @@ const GEMINI_MODELS = {
   PRIMARY: "gemini-2.5-pro-exp-03-25", // Experimental model
   FALLBACK: "gemini-2.5-pro-preview-03-25" // Paid/Preview model
 };
-const OPENAI_MODEL = "gpt-4o";
+const OPENAI_MODEL = "gpt-4.1";
 const ANTHROPIC_MODEL = "claude-3-opus-20240229";
 
 // Safety settings for Gemini
@@ -78,7 +79,7 @@ const safetySettings = [
 // Token limits per provider
 const TOKEN_LIMITS = {
   gemini: 65536, // Common output limit for 2.5 Pro variants
-  openai: 16384,
+  openai: 32768, // Updated limit for GPT-4.1 max output tokens
   anthropic: 64000
 };
 
@@ -309,8 +310,8 @@ async function generateWithGemini(
   };
 
   try {
-    // Pass generationConfig directly as the second argument
-    const generationFn = () => model.generateContent(prompt, generationConfig); 
+    // Structure the first argument as GenerateContentRequest
+    const generationFn = () => model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig });
 
     const result = await withRetry(
       generationFn,

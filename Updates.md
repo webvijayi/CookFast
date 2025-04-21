@@ -845,11 +845,16 @@
 - **Checked `.gitignore`:** Confirmed that the `tmp/` directory is ignored, preventing local results from being committed.
 - **Context:** This allows the document generation status check to function correctly during local development and testing where Netlify Blobs are not accessible.
 
-## ${new Date().toISOString()} - Fix Netlify 502 Error
+## ${new Date().toISOString()} - Fix Netlify 502 Error (Attempt 2) & Update OpenAI Model
 
-- Modified `src/utils/saveResult.ts`.
-- **Issue:** The code attempted to create a `tmp` directory using `fs.mkdir` at the module level, which resolved to the read-only `/var/task/tmp` path in the Netlify Function environment, causing a 502 error during deployment.
-- **Fix:** Moved the local directory creation logic (`fs.mkdir`) inside the `else` block (local filesystem fallback) within the `saveGenerationResult` function. This ensures the directory is only created when running locally and not within the Netlify environment, where Netlify Blobs are used or the writable `/tmp` path should be used if file system access is needed.
+- Modified `src/utils/saveResult.ts`:
+  - Changed logic to determine the temporary file path based on environment: uses `/tmp` directly when `process.env.NETLIFY === 'true'`, otherwise uses `path.join(process.cwd(), 'tmp')`.
+  - Ensured `fs.mkdir` is only called for the local path, as `/tmp` is guaranteed to exist in Netlify.
+  - This aims to resolve the persistent `ENOENT: no such file or directory, mkdir '/var/task/tmp'` error by correctly handling filesystem access in the Netlify environment regardless of Blob store availability.
+- Modified `src/pages/api/generate-docs.ts`:
+  - Updated `OPENAI_MODEL` constant from `"gpt-4o"` to `"gpt-4.1"` as requested.
+  - Updated `TOKEN_LIMITS.openai` from `16384` to `32768` to match GPT-4.1's maximum output tokens.
+  - Fixed a TypeScript error in the `generateWithGemini` function by correctly structuring the arguments passed to `model.generateContent`.
 
 ## [2024-08-02]
 - **Feature:** Enhanced AI prompt in `src/pages/api/generate-docs.ts` to include more form fields (`targetAudience`, `userPersonas`, `projectDescription`, etc.) for richer context.
