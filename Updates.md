@@ -845,6 +845,12 @@
 - **Checked `.gitignore`:** Confirmed that the `tmp/` directory is ignored, preventing local results from being committed.
 - **Context:** This allows the document generation status check to function correctly during local development and testing where Netlify Blobs are not accessible.
 
+## ${new Date().toISOString()} - Fix Netlify 502 Error
+
+- Modified `src/utils/saveResult.ts`.
+- **Issue:** The code attempted to create a `tmp` directory using `fs.mkdir` at the module level, which resolved to the read-only `/var/task/tmp` path in the Netlify Function environment, causing a 502 error during deployment.
+- **Fix:** Moved the local directory creation logic (`fs.mkdir`) inside the `else` block (local filesystem fallback) within the `saveGenerationResult` function. This ensures the directory is only created when running locally and not within the Netlify environment, where Netlify Blobs are used or the writable `/tmp` path should be used if file system access is needed.
+
 ## [2024-08-02]
 - **Feature:** Enhanced AI prompt in `src/pages/api/generate-docs.ts` to include more form fields (`targetAudience`, `userPersonas`, `projectDescription`, etc.) for richer context.
 - **Fix:** Relaxed frontend content validation in `src/components/GeneratorSection.tsx` (`handleSuccessfulResponse`) to display results even if content is short, preventing premature errors.
