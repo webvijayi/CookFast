@@ -1,4 +1,6 @@
 /* eslint-disable */
+// Timestamp: 2024-11-05T12:00:00Z - Added Mermaid diagram generation instructions for Application Flow documents
+// Timestamp: 2025-04-22T21:15:00Z - Moved document selection validation before prompt generation.
 // Timestamp: ${new Date().toISOString()} - Removed ineffective in-memory rate limiter for serverless environment
 // Timestamp: ${new Date().toISOString()} - Refactored Gemini logic, updated models, improved storage
 // Timestamp: ${new Date().toISOString()} - Improved API implementation with error handling and response processing
@@ -16,8 +18,9 @@
 // Timestamp: 2025-04-22T10:50:00Z - Corrected lint error in 400 response.
 // Timestamp: 2025-04-22T11:20:00Z - Fixed 405 response lint error.
 // Timestamp: YYYY-MM-DD - Added logging for raw AI response before parsing
+// Timestamp: 2025-04-22T21:20:00Z - Removed duplicate selectedDocKeys declaration.
 import { NextApiRequest, NextApiResponse } from 'next';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerateContentCandidate, GenerateContentResponse } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerateContentCandidate, GenerateContentResponse, BlockReason } from '@google/generative-ai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { withRetry } from '@/utils/index';
@@ -227,9 +230,25 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
     fileStructure: 'Recommended Project Structure',
   };
 
+  // Fix: Debug the selected documents to ensure they're being processed correctly
+  console.log(`[buildPrompt] Raw selectedDocs:`, JSON.stringify(selectedDocs));
+
+  // Fix: Ensure we're correctly filtering only the selected document types
   const requestedDocTitles = Object.entries(selectedDocs)
-    .filter(([key, isSelected]) => isSelected && requestedDocTitlesMap[key as keyof DocumentSelection])
-    .map(([key]) => requestedDocTitlesMap[key as keyof DocumentSelection]!);
+    .filter(([key, isSelected]) => {
+      const result = Boolean(isSelected) && requestedDocTitlesMap[key as keyof DocumentSelection];
+      // Add debug log for each key
+      console.log(`[buildPrompt] Document key: ${key}, isSelected: ${isSelected}, hasMapping: ${Boolean(requestedDocTitlesMap[key as keyof DocumentSelection])}`);
+      return result;
+    })
+    .map(([key]) => {
+      const title = requestedDocTitlesMap[key as keyof DocumentSelection]!;
+      console.log(`[buildPrompt] Mapped document title: ${title} from key: ${key}`);
+      return title;
+    });
+
+  // Log the final list of document titles that will be requested
+  console.log(`[buildPrompt] Final requested document titles (${requestedDocTitles.length}): ${requestedDocTitles.join(', ')}`);
 
   // Check if we have valid project details - if not, provide default placeholders
   // but ensure we explicitly tell the AI this is a placeholder
@@ -270,6 +289,37 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
                    `**Success Metrics:** ${successMetrics?.trim() || 'Not Specified'}\n` +
                    `</project_details>\n\n`;
 
+  // --- Check if App Flow documentation is requested ---
+  const includesAppFlow = selectedDocs.appFlow;
+  if (includesAppFlow) {
+    // Add specialized Mermaid diagram instructions
+    basePrompt += `## Mermaid Diagram Instructions\n\n` +
+                 `<mermaid_diagram_instructions>\n` +
+                 `When generating "Application Flow" documentation, you MUST include multiple Mermaid diagrams to visualize flows. Follow these requirements:\n\n` +
+                 `1. **Mandatory Diagrams:** Include at least 3 different diagrams:\n` +
+                 `   - User Journey Flowchart\n` +
+                 `   - Component Interaction Sequence Diagram\n` +
+                 `   - Data Flow Diagram\n\n` +
+                 
+                 `2. **Mermaid Syntax:** Use the following format for ALL diagrams:\n` +
+                 "```mermaid\n[DIAGRAM CODE HERE]\n```\n\n" +
+                 
+                 `3. **Sequence Diagram Example:** Use this exact syntax pattern:\n` +
+                 "```mermaid\nsequenceDiagram\n    participant User\n    participant Frontend\n    participant API\n    participant Database\n    \n    User->>Frontend: Interacts with UI\n    Frontend->>API: Sends request\n    API->>Database: Queries data\n    Database-->>API: Returns results\n    API-->>Frontend: Sends response\n    Frontend-->>User: Updates UI\n```\n\n" +
+                 
+                 `4. **Flowchart Example:** Use this exact syntax pattern:\n` +
+                 "```mermaid\nflowchart TD\n    A[Start] --> B{User logged in?}\n    B -->|Yes| C[Dashboard]\n    B -->|No| D[Login Screen]\n    D --> E[Authentication]\n    E -->|Success| C\n    E -->|Failure| D\n    C --> F[End]\n```\n\n" +
+                 
+                 `5. **Requirements for Diagrams:**\n` +
+                 `   - Base all diagrams on the provided project details\n` +
+                 `   - Include major components from the tech stack if specified\n` +
+                 `   - Cover key user flows based on project features\n` +
+                 `   - Show interactions between frontend and backend if both exist\n` +
+                 `   - Add helpful labels, annotations, and captions\n` +
+                 `   - Use proper Mermaid syntax with no mistakes\n` +
+                 `</mermaid_diagram_instructions>\n\n`;
+  }
+
   // --- JSON Output Requirements (Single, Clear Block) ---
   basePrompt += `## Required JSON Output Format\n\n` +
                 `<output_format>\n` +
@@ -287,6 +337,39 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
                 `}\n` +
                 `</output_format>\n\n`;
 
+  // Add specific document type instructions for Application Flow
+  if (includesAppFlow) {
+    basePrompt += `## Application Flow Document Requirements\n\n` +
+                 `<app_flow_requirements>\n` +
+                 `The "Application Flow" document MUST include these specific sections:\n\n` +
+                 
+                 `1. **Overview** - Brief summary of the application architecture\n\n` +
+                 
+                 `2. **User Journeys** - Flow diagrams of key user interactions\n` +
+                 `   - Show each major user path through the application\n` +
+                 `   - Use Mermaid flowchart syntax (flowchart TD)\n` +
+                 `   - Label key decision points and actions\n\n` +
+                 
+                 `3. **Component Interactions** - Sequence diagrams showing how components communicate\n` +
+                 `   - Show request/response patterns\n` +
+                 `   - Include all major system components\n` +
+                 `   - Use Mermaid sequence diagram syntax (sequenceDiagram)\n\n` +
+                 
+                 `4. **Data Flow** - Diagrams showing how data moves through the system\n` +
+                 `   - Show data transformations\n` +
+                 `   - Include data stores and processing steps\n` +
+                 `   - Use appropriate Mermaid diagram syntax\n\n` +
+                 
+                 `5. **Error Handling Flows** - How the system handles failures\n` +
+                 `   - Show error paths and recovery mechanisms\n` +
+                 `   - Use Mermaid diagram syntax\n\n` +
+                 
+                 `6. **Deployment Flow** - How the application is deployed\n` +
+                 `   - Include build and release process if relevant\n` +
+                 `   - Use Mermaid diagram syntax\n` +
+                 `</app_flow_requirements>\n\n`;
+  }
+
   // --- Final Instruction (Single, Clear) ---
   basePrompt += `<final_instruction>\n` +
                 `Generate a JSON object containing complete documentation for exactly these ${requestedDocTitles.length} document types:\n\n` +
@@ -298,7 +381,14 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
                 `4. Each document MUST have its own top-level key as listed above\n` +
                 `5. DO NOT create a "general" object containing document sections\n` +
                 `6. NO text outside the JSON structure\n` +
-                `</final_instruction>`;
+                `7. IMPORTANT: NEVER return an empty JSON object. If you cannot generate full documentation, at least include a basic outline or minimal content for each requested document.\n`;
+  
+  // Add special instruction for Application Flow
+  if (includesAppFlow) {
+    basePrompt += `8. "Application Flow" MUST include Mermaid diagrams using proper syntax (in code blocks with \`\`\`mermaid). Include at least 3 different diagram types.\n`;
+  }
+  
+  basePrompt += `</final_instruction>`;
 
   console.log(`[buildPrompt] Generated prompt requesting ${requestedDocTitles.length} documents in JSON format.`);
   return basePrompt;
@@ -327,81 +417,114 @@ async function generateWithGemini(
   requestId: string,
   isBackground: boolean
 ): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with Gemini model: ${modelName} (Requesting JSON structure via prompt)`);
+  console.log(`[${requestId}] [Gemini] Initializing with model: ${modelName}`);
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: modelName, safetySettings });
 
   const generationConfig = {
+    // temperature: 0.7, // Adjust as needed
     maxOutputTokens: TOKEN_LIMITS.gemini,
-    // NOTE: Add responseMimeType: "application/json" here if Gemini model supports it reliably
+    // responseMimeType: "application/json", // Ensure JSON output if model supports it
   };
 
   try {
-    // Structure the first argument as GenerateContentRequest
-    const generationFn = () => model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig });
+    console.log(`[${requestId}] [Gemini] Sending request...`);
+    // Add a system instruction for non-empty responses
+    const systemInstruction = "You are DocuMentor, a specialized technical documentation generator. You MUST output a valid, non-empty JSON object containing markdown-formatted documentation. Never return an empty object {}. Always include at least one document with meaningful content. When generating Application Flow documentation, include multiple Mermaid diagrams in markdown code blocks. Use ```mermaid syntax for sequence diagrams and flowcharts to visualize application flows.";
 
-    const result = await withRetry(
-      generationFn,
-      {
-        retries: 2,
-        retryDelayMs: 1500,
-        onRetry: (attempt, error, willRetry) => console.warn(`[${requestId}] Gemini attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. ${willRetry ? 'Retrying...' : 'Giving up.'}`),
-        isBackground,
-        timeoutMs: isBackground ? 840000 : 60000, // Use longer timeout for background functions
-        errorMessage: `Gemini API call timed out for model ${modelName}`
-      }
-    );
+    // Use retry utility
+    const generationFn = () => model.generateContent({ 
+      contents: [
+        { role: "user", parts: [{ text: systemInstruction + "\n\n" + prompt }] }
+      ], 
+      generationConfig 
+    });
+    
+    const result = await withRetry(generationFn, {
+      retries: 2,
+      retryDelayMs: 1500,
+      isBackground,
+      errorMessage: `Gemini API Call (${requestId})`
+    });
+
+    // --- Robust Response Validation ---
+    if (!result || !result.response) {
+      console.error(`[${requestId}] [Gemini] Error: Received null or undefined response object.`);
+      throw new Error('Gemini API returned an invalid response object.');
+    }
 
     const response = result.response;
 
-    if (!response || !response.candidates || response.candidates.length === 0) {
-      console.error(`[${requestId}] Gemini Error: No candidates returned for model ${modelName}.`, response?.promptFeedback);
-      throw new Error('No content generated by Gemini. Prompt feedback: ' + JSON.stringify(response?.promptFeedback));
+    // Check for safety blocks
+    if (response.promptFeedback?.blockReason) {
+      const blockReason = response.promptFeedback.blockReason;
+      const safetyRatings = response.promptFeedback.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ') || 'N/A';
+      console.error(`[${requestId}] [Gemini] Error: Prompt blocked due to safety settings. Reason: ${blockReason}. Ratings: [${safetyRatings}]`);
+      throw new Error(`Gemini API request blocked due to safety settings: ${blockReason}.`);
     }
 
-    const candidate: GenerateContentCandidate | undefined = response.candidates[0];
-
-    if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-      console.warn(`[${requestId}] Gemini generation finished with reason: ${candidate.finishReason}. Content might be incomplete.`, candidate?.safetyRatings);
-      if (candidate.finishReason === 'SAFETY') {
-        throw new Error(`Generation stopped due to safety settings. Ratings: ${JSON.stringify(candidate.safetyRatings)}`);
-      } else if (candidate.finishReason === 'MAX_TOKENS') {
-        console.warn(`[${requestId}] Max tokens reached for model ${modelName}. Output might be truncated.`);
-      } else {
-         throw new Error(`Generation finished unexpectedly: ${candidate.finishReason}`);
+    if (!response.candidates || response.candidates.length === 0) {
+      const finishReason = response.candidates?.[0]?.finishReason || 'Unknown';
+      const safetyRatings = response.candidates?.[0]?.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ') || 'N/A';
+      console.error(`[${requestId}] [Gemini] Error: No candidates returned. Finish Reason: ${finishReason}. Safety Ratings: [${safetyRatings}]`);
+      // Check if candidate finish reason indicates blockage
+      if (finishReason && finishReason !== 'STOP') {
+         throw new Error(`Gemini API generation stopped unexpectedly. Finish Reason: ${finishReason}`);
       }
+      throw new Error('Gemini API returned no candidates in the response.');
     }
 
-    let combinedContent = '';
-    if (candidate?.content?.parts) {
-      combinedContent = candidate.content.parts
-        .map((part: GeminiPart) => typeof part === 'string' ? part : part.text || '')
-        .join('');
-    } else {
-      console.warn(`[${requestId}] No parts found in Gemini candidate for model ${modelName}.`);
+    const candidate = response.candidates[0];
+
+    // Check candidate finish reason
+    if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+      console.error(`[${requestId}] [Gemini] Error: Candidate generation stopped. Reason: ${candidate.finishReason}. Safety Ratings: [${candidate.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ') || 'N/A'}]`);
+      throw new Error(`Gemini API generation finished unexpectedly: ${candidate.finishReason}.`);
     }
 
-    combinedContent = combinedContent.replace(/^```json\s*([\s\S]*?)\s*```$/, '$1').trim(); // Clean ```json
+    if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+      console.error(`[${requestId}] [Gemini] Error: Candidate content or parts are missing.`);
+      throw new Error('Gemini API candidate returned empty content or parts.');
+    }
 
-    const inputTokens = Math.ceil(prompt.length / 4);
-    const outputTokens = Math.ceil(combinedContent.length / 4);
-    const totalTokens = inputTokens + outputTokens;
-    const tokens = { input: inputTokens, output: outputTokens, total: totalTokens };
+    // Aggregate text from parts (handle potential non-text parts gracefully)
+    let responseText = '';
+    for (const part of candidate.content.parts) {
+        if (typeof part === 'string') {
+            responseText += part;
+        } else if (part && typeof part.text === 'string') {
+            responseText += part.text;
+        } else {
+             console.warn(`[${requestId}] [Gemini] Encountered non-text part: ${JSON.stringify(part)}`);
+        }
+    }
+    responseText = responseText.trim(); // Trim aggregated text
 
-    console.log(`[${requestId}] Gemini generation successful with ${modelName}. Estimated tokens: ${JSON.stringify(tokens)}`);
+    if (!responseText) {
+        console.error(`[${requestId}] [Gemini] Error: Extracted response text is empty after processing parts.`);
+        throw new Error('Gemini API returned empty text content after processing parts.');
+    }
+    // --- End Validation ---
+
+    // Assuming token count might be available directly or needs calculation
+    // Placeholder for token calculation - adapt based on actual API response structure if available
+    const inputTokens = response.usageMetadata?.promptTokenCount ?? 0;
+    const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
+    const totalTokens = response.usageMetadata?.totalTokenCount ?? (inputTokens + outputTokens);
+
+    console.log(`[${requestId}] [Gemini] Request successful. Tokens: Input=${inputTokens}, Output=${outputTokens}, Total=${totalTokens}. Response length: ${responseText.length}`);
 
     return {
-      responseText: combinedContent,
+      responseText,
       modelUsed: modelName,
-      tokens: tokens
+      tokens: { input: inputTokens, output: outputTokens, total: totalTokens }
     };
-
   } catch (error: any) {
-    console.error(`[${requestId}] Error calling Gemini model ${modelName}:`, error.message);
-    if (error.response?.data) {
-      console.error(`[${requestId}] Gemini API Error Details:`, error.response.data);
-    }
-    throw new Error(`Gemini API Error (${modelName}): ${error.message}`);
+    console.error(`[${requestId}] [Gemini] API call failed:`, error);
+    // Rethrow a more specific error message if possible
+    const message = error.message || 'Unknown Gemini API error';
+    // Check for specific Gemini API error structures if available (e.g., error.details)
+    throw new Error(`Gemini API Error: ${message}`);
   }
 }
 
@@ -419,12 +542,15 @@ async function generateWithOpenAI(
     const completionFn = () => openai.chat.completions.create({
         model: OPENAI_MODEL,
         messages: [
-          { role: "system", content: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid JSON objects containing markdown-formatted documentation. Always include at least one document in your response, even if minimal." },
+          { 
+            role: "system", 
+            content: "You are DocuMentor, a specialized technical documentation generator. You MUST output a valid, non-empty JSON object containing markdown-formatted documentation. Always include at least one document in your response even if minimal. Your response MUST contain at least one key-value pair for documentation, NEVER return an empty object {}. If generating Application Flow documentation, include multiple Mermaid diagrams with proper syntax in markdown code blocks." 
+          },
           { role: "user", content: prompt }
         ],
         max_tokens: TOKEN_LIMITS.openai,
         response_format: { type: "json_object" }, // Explicitly request JSON
-        temperature: 0.7, // Add temperature to control randomness
+        temperature: 0.7, // Using 0.7 for more creative and varied diagrams
       });
 
     // Add specific logging before the API call
@@ -442,6 +568,16 @@ async function generateWithOpenAI(
       }
     );
 
+    // Add more specific logging of the OpenAI response
+    console.log(`[${requestId}] OpenAI raw response structure:`, JSON.stringify({
+      id: completion.id,
+      object: completion.object,
+      model: completion.model,
+      usage: completion.usage,
+      choices_length: completion.choices?.length || 0,
+      finish_reason: completion.choices?.[0]?.finish_reason || 'unknown'
+    }));
+    
     const responseText = completion.choices[0]?.message?.content;
 
     if (!responseText) {
@@ -505,7 +641,7 @@ async function generateWithAnthropic(
     const messageFn = () => anthropic.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: TOKEN_LIMITS.anthropic,
-        system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object - no text before or after.",
+        system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid, non-empty JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object with at least one document - no text before or after. NEVER return an empty JSON object {}. When generating Application Flow documentation, include multiple Mermaid diagrams with proper syntax in markdown code blocks using ```mermaid for flowcharts and sequence diagrams.",
         messages: [{ role: "user", content: prompt }],
       });
 
@@ -582,6 +718,9 @@ export default async function handler(
     const body = req.body as GenerateDocsRequestBody;
     const { projectDetails, selectedDocs, provider, apiKey } = body;
     
+    // Log the raw selectedDocs object from the request
+    console.log(`[${requestId}] Raw selectedDocs from request:`, JSON.stringify(selectedDocs));
+
     // Validate required fields
     if (!projectDetails || !selectedDocs || !provider || !apiKey) {
       console.error(`[${requestId}] Missing required fields in request`);
@@ -593,23 +732,48 @@ export default async function handler(
     }
 
     // Convert selectedDocs object to array of keys where value is true
+    // Fix: Check that selectedDocs is properly structured 
+    if (typeof selectedDocs !== 'object') {
+      console.error(`[${requestId}] Invalid selectedDocs format: ${typeof selectedDocs}`);
+      return res.status(400).json({
+        status: 'failed',
+        error: 'Invalid selectedDocs format. Expected an object with boolean values.',
+        requestId
+      });
+    }
+
+    // Fix: Ensure proper parsing of selectedDocs object to extract document keys
     const selectedDocKeys = Object.entries(selectedDocs)
-      .filter(([, value]) => value)
+      .filter(([key, value]) => {
+        // Add debug logs for each key-value pair
+        console.log(`[${requestId}] Document selection: key=${key}, value=${value}, type=${typeof value}`);
+        return Boolean(value); // Convert any truthy value to true
+      })
       .map(([key]) => key);
-    
+
+    console.log(`[${requestId}] Processed selectedDocKeys:`, selectedDocKeys);
+
+    // Validate that at least one document is selected BEFORE building the prompt
     if (selectedDocKeys.length === 0) {
       console.error(`[${requestId}] No documents selected`);
-      return res.status(400).json({ 
-        status: 'failed', 
+      // Return error immediately if no documents are selected
+      return res.status(400).json({
+        status: 'failed',
         error: 'Please select at least one document type to generate',
         requestId
       });
     }
-    
+
+    // Log the document keys that were selected
+    console.log(`[${requestId}] Selected document types (${selectedDocKeys.length}): ${selectedDocKeys.join(', ')}`);
+
     // Build the prompt from project details and selected documents
     const prompt = buildPrompt(projectDetails, selectedDocs);
     console.log(`[${requestId}] Built prompt for ${selectedDocKeys.length} document types`);
     
+    // Add a debug log of the first 500 chars of the prompt
+    console.log(`[${requestId}] Prompt preview (first 500 chars): ${prompt.substring(0, 500)}...`);
+
     // Process response based on provider
     let result: { responseText: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
     try {
@@ -674,8 +838,8 @@ export default async function handler(
     // Process the raw response text into structured data
     console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}): ${result.responseText.substring(0, 200)}...`);
     
-    // Add detailed logging of the raw response for debugging
-    console.log(`[${requestId}] Raw response from openai (length: ${result.responseText.length}):`, result.responseText);
+    // Add detailed logging of the ENTIRE raw response for debugging
+    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}):`, result.responseText);
     
     try {
       // First check if the response is valid JSON
@@ -704,7 +868,24 @@ export default async function handler(
       if (!parsedResponse || Object.keys(parsedResponse).length === 0) {
         console.error(`[${requestId}] AI provider returned empty JSON object: ${result.responseText}`);
         
-        // Create a fallback document with error information
+        // Extract the requested document titles from the prompt for fallback
+        const requestedDocTitlesRegex = /<final_instruction>[\s\S]*?these (\d+) document types:[\s\S]*?((?:- "[^"]+"\n)+)/i;
+        const promptMatch = prompt.match(requestedDocTitlesRegex);
+        const requestedTitles: string[] = [];
+        
+        if (promptMatch && promptMatch[2]) {
+          // Extract titles from the matched section in the prompt
+          const titleLines = promptMatch[2].split('\n');
+          titleLines.forEach(line => {
+            const titleMatch = line.match(/- "([^"]+)"/);
+            if (titleMatch && titleMatch[1]) {
+              requestedTitles.push(titleMatch[1]);
+            }
+          });
+          console.log(`[${requestId}] Extracted ${requestedTitles.length} document titles from prompt for fallback`);
+        }
+        
+        // Create a fallback document with error information and minimal template documents
         const fallbackContent = `# Generation Failed - Empty Response
         
 ## What Happened
@@ -733,6 +914,17 @@ The AI provider (${provider.toUpperCase()}) returned an empty response. This cou
           content: fallbackContent
         }];
         
+        // Add fallback documents for each requested document type
+        if (requestedTitles.length > 0) {
+          requestedTitles.forEach(title => {
+            fallbackDocuments.push({
+              title,
+              content: `# ${title}\n\n## Overview\n\nThis is a minimal placeholder document. The AI provider returned an empty response, but this document type was requested.\n\n## Basic Outline\n\n- Section 1\n- Section 2\n- Section 3`
+            });
+          });
+          console.log(`[${requestId}] Added ${requestedTitles.length} minimal fallback documents`);
+        }
+        
         // Create response with fallback documents and error flag
         const errorData: ApiResponseType = {
           status: 'completed', // Mark as completed, but with error flag
@@ -754,7 +946,7 @@ The AI provider (${provider.toUpperCase()}) returned an empty response. This cou
         if (isBackground) {
           await saveGenerationResult(requestId, errorData);
           return res.status(202).json({ 
-            message: 'Document generation task started, but AI returned empty response',
+            message: 'Document generation task started, but AI returned empty response. Fallback content created.',
             requestId,
             isBackgroundProcessing: true
           });

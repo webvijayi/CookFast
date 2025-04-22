@@ -292,12 +292,18 @@ export default function GeneratorSection() {
       headers['X-Netlify-Background'] = 'true';
       addDebugLog('Form Submit: Adding X-Netlify-Background header');
 
+      // Log the actual selectedDocs object for debugging
+      addDebugLog('Form Submit: Selected docs being sent', { 
+        fullObject: selectedDocs,
+        keys: selectedDocKeys
+      });
+
       const response = await fetch('/api/generate-docs', {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
           projectDetails: sanitizedProjectDetails,
-          selectedDocs: selectedDocKeys,
+          selectedDocs: selectedDocs,
           provider,
           apiKey,
         }),

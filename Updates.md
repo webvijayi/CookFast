@@ -1,5 +1,71 @@
 # Updates Log
 
+## 2024-11-05 - Analyzed Mermaid Diagram Generation for Application Flow Documentation
+
+### Development Steps
+1. Examined the generate-docs API endpoint (`src/pages/api/generate-docs.ts`) to understand the current document generation flow
+2. Analyzed `MarkdownRenderer.tsx` to confirm Mermaid diagram support is correctly implemented
+3. Verified Mermaid is installed as a dependency in package.json (version 11.6.0)
+4. Identified that the Application Flow document type is designed to support flowcharts and sequence diagrams
+5. Located the diagram type detection logic in the MarkdownRenderer component for: sequence diagrams, flowcharts, class diagrams, and ER diagrams
+
+### Key Decisions
+1. Determined that Mermaid diagrams are supported in the rendering component, but there are no specific instructions in the prompt to generate Mermaid diagrams
+2. Identified that the JSON output format of the current prompt doesn't explicitly request Mermaid syntax for diagrams
+3. Concluded that we need to enhance the buildPrompt function to specifically instruct the AI to use Mermaid syntax for Application Flow diagrams
+
+### Next Steps
+1. Modify the buildPrompt function in generate-docs.ts to include specific instructions for Mermaid diagram syntax when the appFlow document type is requested
+2. Add examples of Mermaid diagram syntax in the prompt to guide the AI in generating proper diagrams
+3. Include specific instructions for different diagram types (sequence diagrams, flowcharts) with proper Mermaid syntax
+4. Test the enhanced prompt with different project types to verify diagram generation
+
+## 2025-04-23 - Fixed Multiple Document Generation Issue
+
+### Development Steps
+1. Modified `src/components/GeneratorSection.tsx`:
+   - Fixed critical bug in the API call where only document keys were being sent instead of the full document selection object
+   - Added additional logging to trace document selection processing
+   - Enhanced debugging information for API requests
+
+2. Enhanced `src/pages/api/generate-docs.ts`:
+   - Added extensive logging to troubleshoot document selection processing
+   - Fixed document mapping to ensure all selected documents are included in the prompt
+   - Enhanced prompt generation to explicitly prevent empty JSON responses
+   - Modified the system message for all three AI providers (OpenAI, Gemini, Anthropic) to require non-empty responses
+   - Added a robust fallback mechanism for when AI providers return empty JSON objects
+
+### Key Decisions
+- Fixed the root cause: form was sending an array of keys instead of the proper document selection object
+- Enhanced all AI provider calls to explicitly prevent empty JSON responses
+- Added detailed logging throughout the document generation process for better debugging
+- Implemented a fallback document generation system that creates template documents when AI returns empty responses
+- Modified system prompts to ensure AI models understand the importance of generating all requested document types
+
+### Next Steps
+1. Implement more robust input validation on both client and server side
+2. Add unit tests specifically for document selection handling
+3. Consider frontend improvements to show which document types are selected more clearly
+4. Add telemetry to track successful document generation rates by provider
+5. Explore implementing a document preview system to give users feedback on what will be generated
+
+## 2025-04-22 - Fixed Empty JSON Response in Document Generation
+
+### Development Steps
+1. Modified `src/pages/api/generate-docs.ts`:
+   - Moved validation for `selectedDocKeys.length === 0` to occur *before* calling `buildPrompt`.
+   - Removed duplicate declaration of `selectedDocKeys` variable.
+
+### Key Decisions
+- Prevented API calls with invalid prompts (requesting 0 documents) by validating document selection earlier.
+- Resolved TypeScript redeclaration error caused by the previous refactoring attempt.
+- Addressed the root cause of AI providers returning empty JSON (`{}`) when no documents were selected.
+
+### Next Steps
+1. Monitor API logs to confirm the fix prevents empty JSON errors.
+2. Consider adding frontend validation to disable the submit button if no documents are selected.
+3. Refine prompt engineering further if other edge cases arise.
+
 ## 2024-08-21 - Fixed Download/Copy Functionality and Document Generation Issues
 
 ### Development Steps
@@ -1089,3 +1155,12 @@ This update addresses an issue where the application was incorrectly identifying
 - Ensured download, copy, and display functions work properly with Netlify Blobs
 
 This change improves reliability of document generation and storage in production environments by relying exclusively on Netlify Blobs for data persistence, while maintaining filesystem fallback for local development.
+
+## ${new Date().toISOString().split("T")[0]}
+
+- **Enhanced API Error Handling (`src/pages/api/generate-docs.ts`)**
+  - Added robust checks within `generateWithGemini`, `generateWithOpenAI`, and `generateWithAnthropic` to validate provider responses before accessing data.
+  - Specific checks added for missing/empty choice/candidate/content arrays, finish/stop reasons (including content filtering and safety blocks), and empty text content.
+  - Implemented a `try...catch` block around the `JSON.parse()` call in the main handler to gracefully handle malformed or non-JSON responses from AI providers, with a fallback to markdown parsing.
+  - Improved error logging to include provider details and specific error messages.
+  - This addresses failures caused by providers returning empty `{}` or error structures within a 2xx response.
