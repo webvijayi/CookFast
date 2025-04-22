@@ -663,6 +663,13 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // ---> ADD LOGGING HERE <---
+  console.log('[SERVER /api/generate-docs] Received request body:', req.body);
+  // ---> END LOGGING <---
+
+  // Add appropriate CORS headers for API calls
+  // Allow all origins for development
+
   // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ 
@@ -676,7 +683,7 @@ export default async function handler(
   console.info(`[${requestId}] Starting documentation generation request`);
 
   try {
-    const { details, docs: selectedDocs, provider = 'openai', apiKey, background = true } = req.body;
+    const { details, selectedDocs, provider = 'openai', apiKey, background = true } = req.body;
     console.info(`[${requestId}] Background Processing: ${background}`);
     
     // Log the raw selectedDocs object from the request

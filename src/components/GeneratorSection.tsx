@@ -298,11 +298,20 @@ export default function GeneratorSection() {
         keys: selectedDocKeys
       });
 
+      // ---> ADD LOGGING HERE <---
+      console.log('[CLIENT] handleFormSubmit: Data before sending:', {
+        details: sanitizedProjectDetails,
+        selectedDocs: selectedDocs,
+        provider: provider,
+        apiKey: apiKey ? '[API Key Present]' : '[API Key MISSING!]', // Don't log the key itself
+      });
+      // ---> END LOGGING <---
+
       const response = await fetch('/api/generate-docs', {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
-          projectDetails: sanitizedProjectDetails,
+          details: sanitizedProjectDetails,
           selectedDocs: selectedDocs,
           provider,
           apiKey,
