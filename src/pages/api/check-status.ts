@@ -18,6 +18,16 @@ const STORE_NAME = 'generationResults';
 // Determine the correct temporary directory path for local development only
 const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
+// Type for Netlify Blobs API options with consistency
+interface GetOptions {
+  type?: 'json' | 'text' | 'arrayBuffer' | 'blob' | 'stream';
+  consistency?: 'eventual' | 'strong';
+}
+
+interface GetMetadataOptions {
+  consistency?: 'eventual' | 'strong';
+}
+
 /**
  * Retrieves document generation result from Netlify Blobs in production
  * or local file system during local development.
@@ -31,18 +41,81 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
     try {
       console.log(`[${requestId}] Using Netlify Blobs for retrieval (environment: ${process.env.NETLIFY_BLOBS_CONTEXT || 'unknown'})`);
       
+      // Debug Netlify Blobs configuration
+      console.log(`[${requestId}] Netlify Blobs Debug:`, {
+        NETLIFY: process.env.NETLIFY,
+        NETLIFY_BLOBS_CONTEXT: process.env.NETLIFY_BLOBS_CONTEXT,
+        NETLIFY_INTERNAL_SITE_ID: process.env.NETLIFY_INTERNAL_SITE_ID,
+        NETLIFY_FUNCTION_NAME: process.env.NETLIFY_FUNCTION_NAME,
+        NODE_VERSION: process.env.NODE_VERSION,
+        store: STORE_NAME,
+        key: requestId,
+        cwd: process.cwd(),
+        isNetlifyByLogic: isNetlify
+      });
+      
       // Create a site-wide store using standard getStore method
       const store = getStore(STORE_NAME);
       
-      // Retrieve the document with JSON parsing
-      const document = await store.get(requestId, { 
+      if (!store) {
+        console.error(`[${requestId}] Failed to create Netlify Blobs store`);
+        throw new Error('Failed to create Netlify Blobs store');
+      }
+      
+      // First, list all blobs to see what's in the store
+      try {
+        console.log(`[${requestId}] Listing all blobs in store '${STORE_NAME}' to verify content`);
+        const listResult = await store.list();
+        if (listResult.blobs.length > 0) {
+          console.log(`[${requestId}] Store contains ${listResult.blobs.length} blobs:`, 
+            listResult.blobs.map(b => b.key).join(', '));
+            
+          const hasRequestId = listResult.blobs.some(b => b.key === requestId);
+          if (hasRequestId) {
+            console.log(`[${requestId}] Found matching blob in store!`);
+          } else {
+            console.log(`[${requestId}] Blob with requested ID not found in store. Available blobs: ${listResult.blobs.map(b => b.key).join(', ')}`);
+          }
+        } else {
+          console.log(`[${requestId}] No blobs found in store '${STORE_NAME}'`);
+        }
+      } catch (listError) {
+        console.error(`[${requestId}] Error listing blobs:`, listError);
+      }
+      
+      // Check if blob exists before trying to get it
+      console.log(`[${requestId}] Checking metadata for key: ${requestId}`);
+      const metadataOptions: GetMetadataOptions = { consistency: 'strong' };
+      const metadata = await store.getMetadata(requestId, metadataOptions);
+      
+      if (metadata) {
+        console.log(`[${requestId}] Blob exists with metadata:`, metadata);
+      } else {
+        console.log(`[${requestId}] No metadata found for blob with key ${requestId}`);
+      }
+      
+      // Retrieve the document with JSON parsing and strong consistency
+      console.log(`[${requestId}] Attempting to retrieve blob with key: ${requestId}`);
+      const getOptions: GetOptions = { 
         type: 'json',
         // Use strong consistency to ensure we get the latest data
         consistency: 'strong'
-      });
+      };
+      
+      const document = await store.get(requestId, getOptions);
       
       if (!document) {
         console.log(`[${requestId}] No result found in Netlify Blobs store '${STORE_NAME}'`);
+        
+        // Try listing all blobs in the store again to see what's available
+        try {
+          console.log(`[${requestId}] Attempting second listing of all blobs in store '${STORE_NAME}'`);
+          const listResult = await store.list();
+          console.log(`[${requestId}] Available blobs in store (second check):`, 
+            listResult.blobs.map(b => b.key).join(', '));
+        } catch (listError) {
+          console.error(`[${requestId}] Error on second listing of blobs:`, listError);
+        }
         
         // Try fallback to filesystem if Netlify Blobs returns nothing
         try {
@@ -55,28 +128,16 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
           return document;
         } catch (fallbackError: any) {
           // If file not found or other error, no result exists
-          console.log(`[${requestId}] No result found in filesystem fallback either`);
+          console.log(`[${requestId}] No result found in filesystem fallback either: ${fallbackError.message || String(fallbackError)}`);
           return null;
         }
       }
       
-      console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs`);
-      
-      // Optionally retrieve metadata for additional debugging
-      try {
-        const metadata = await store.getMetadata(requestId);
-        if (metadata) {
-          console.log(`[${requestId}] Metadata retrieved: saved at ${metadata.metadata?.timestamp || 'unknown time'}`);
-        }
-      } catch (metaError: any) {
-        // Non-critical error, just log it
-        console.warn(`[${requestId}] Could not retrieve metadata: ${metaError.message}`);
-      }
-      
+      console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs, type: ${typeof document}, has properties: ${document ? Object.keys(document).join(', ') : 'none'}`);
       return document;
     } catch (error: any) {
-      console.error(`[${requestId}] Error reading document from Netlify Blobs:`, error.message);
-      console.error(`[${requestId}] Stack trace:`, error.stack);
+      console.error(`[${requestId}] Error reading document from Netlify Blobs:`, error.message || String(error));
+      console.error(`[${requestId}] Stack trace:`, error.stack || 'No stack trace available');
       
       // Log additional diagnostic information
       if (error.code || error.statusCode) {
@@ -94,7 +155,7 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
         return document;
       } catch (fallbackError: any) {
         // If file not found or other error, no result exists
-        console.log(`[${requestId}] No result found in filesystem fallback either`);
+        console.log(`[${requestId}] No result found in filesystem fallback either: ${fallbackError.message || String(fallbackError)}`);
         return null;
       }
     }
@@ -116,7 +177,7 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
     } catch (error: any) {
       // If file not found (ENOENT) or other error, assume it's processing or doesn't exist
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[${requestId}] Error reading result from local file:`, error.message);
+        console.error(`[${requestId}] Error reading result from local file:`, error.message || String(error));
       } else {
         console.log(`[${requestId}] No result found in local tmp directory`);
       }
@@ -204,6 +265,10 @@ export default async function handler(
     res.setHeader('X-Request-ID', requestId);
     res.setHeader('X-Processing-Time', new Date().toISOString());
     res.setHeader('X-Storage-Method', isNetlify ? 'Netlify-Blobs' : 'Local-Filesystem');
+    res.setHeader('X-Netlify-Environment', process.env.NETLIFY_BLOBS_CONTEXT || 'unknown');
+
+    // Log the request
+    console.log(`[${requestId}] Processing status check request at ${new Date().toISOString()}`);
 
     // Check for results using our document store utility
     const document = await getDocumentFromStore(requestId);
@@ -287,7 +352,7 @@ export default async function handler(
       });
     }
     
-    // If no document, assume it's processing
+    // If no document, assume it's still processing
     console.log(`[${requestId}] No document found in store, assuming processing`);
     
     // Return processing status to client
@@ -295,18 +360,20 @@ export default async function handler(
       status: 'processing',
       message: 'Document generation is still in progress...',
       progress: 0, // Unknown progress
-      requestId
+      requestId,
+      timestamp: new Date().toISOString()
     });
   } catch (error: any) {
     // Handle any unexpected errors
-    console.error(`[${requestId || 'unknown'}] Unexpected error in check-status:`, error.message);
-    console.error(error.stack);
+    console.error(`[${requestId || 'unknown'}] Unexpected error in check-status:`, error.message || String(error));
+    console.error(error.stack || 'No stack trace available');
     
     return res.status(500).json({
       status: 'failed',
       message: 'An unexpected error occurred while checking generation status',
-      error: 'Internal server error',
-      requestId
+      error: `Internal server error: ${error.message || String(error)}`,
+      requestId,
+      timestamp: new Date().toISOString()
     });
   }
 }

@@ -1,6 +1,8 @@
 /**
  * Utility to save generation results for later retrieval using Netlify Blobs
  * or local file system as a fallback.
+ * Updated: ${new Date().toISOString()} - Simplified Netlify detection, removed FS fallback on Netlify, improved Blob logging.
+ * Updated: ${new Date().toISOString()} - Fixed Netlify Blobs write issues with strong consistency and better error handling.
  * Updated: ${new Date().toISOString()} - Prioritized Netlify Blobs for production, removed conditional NETLIFY_BLOBS_CONTEXT check.
  * Updated: ${new Date().toISOString()} - Fixed tmp path to use /tmp instead of /var/task/tmp on Netlify.
  * Updated: ${new Date().toISOString()} - Correctly determine tmp path based on Netlify env.
@@ -11,131 +13,275 @@
  * Updated: 2025-04-22 - Removed filesystem fallback for production, enhanced Netlify Blobs implementation.
  * Updated: 2025-04-22 - Fixed environment detection logic to properly identify Netlify deployments.
  */
-import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
 import path from 'path';
+import { getStore } from '@netlify/blobs';
 
-// Determine if running in Netlify environment - check multiple indicators
-// The NETLIFY env var is the primary indicator, but also check deployment-specific paths
-const isNetlify = process.env.NETLIFY === 'true' || 
-                  process.env.NETLIFY_BLOBS_CONTEXT === 'production' || 
-                  process.env.NETLIFY_DEV === 'true' ||
-                  process.cwd().includes('/var/task');
+// Type definitions for Netlify Blobs API options
+interface SetOptions {
+  consistency?: 'eventual' | 'strong';
+  metadata?: Record<string, unknown>;
+}
 
-console.log(`Environment detection: isNetlify=${isNetlify}, NETLIFY=${process.env.NETLIFY}, NETLIFY_BLOBS_CONTEXT=${process.env.NETLIFY_BLOBS_CONTEXT}, cwd=${process.cwd()}`);
+interface GetMetadataOptions {
+  consistency?: 'eventual' | 'strong';
+}
 
-// Use consistent store name for all generation results
+interface DebugResponse {
+  isNetlify: boolean;
+  // netlifyContext: string | undefined; // Removed - Rely on SDK's internal context
+  // blobsEnabled: boolean; // Removed - Redundant check
+  storeUsed: string | null; // Track which store was actually used (blobs or fs)
+  storeCreated: boolean;
+  attemptedStorage: string[];
+  errors: Record<string, string>;
+  timestamp: string;
+  processingTimeMs: number;
+  tokensUsed?: { 
+    input: number; 
+    output: number; 
+    total: number;
+  };
+  // Additional fields for debugging
+  environment: {
+    NETLIFY?: boolean;
+    NETLIFY_DEV?: boolean;
+    CWD?: string;
+    NODE_ENV?: string;
+  };
+}
+
+// Store name for all generation results
 const STORE_NAME = 'generationResults';
 
-// Determine the correct temporary directory path for local development only
-const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
+// Determine if running in a deployed Netlify environment
+const isNetlify = process.env.NETLIFY === 'true';
+// Determine if running in Netlify Dev
+const isNetlifyDev = process.env.NETLIFY_DEV === 'true';
+
+console.log(`Environment detection: isNetlify=${isNetlify}, isNetlifyDev=${isNetlifyDev}, NETLIFY=${process.env.NETLIFY}, NETLIFY_DEV=${process.env.NETLIFY_DEV}, cwd=${process.cwd()}`);
+
+// Determine the correct temporary directory path (only used for local dev/non-Netlify)
+const localTmpDir = path.join(process.cwd(), 'tmp');
 
 /**
- * Save document generation result to Netlify Blobs in production
- * or local file system (as fallback) during local development.
+ * Prepares a debug response object with information about the environment and configuration.
  * 
- * @param requestId - Unique identifier for this generation request
- * @param data - The data to save
- * @returns Promise<boolean> - True if save was successful
+ * @returns Debug response object with environment and configuration information
  */
-export async function saveGenerationResult(requestId: string, data: any): Promise<boolean> {
-  // Log document structure for debugging
-  if (data?.documents) {
-    console.log(`[${requestId}] Saving document result with ${data.documents.length || 0} documents`);
-    if (Array.isArray(data.documents)) {
-      // Log document titles for debugging
-      console.log(`[${requestId}] Document titles: ${data.documents.map((doc: any) => 
-        doc?.title || 'Untitled').join(', ')}`);
-      
-      // Log rough content length for each document
-      data.documents.forEach((doc: any, index: number) => {
-        const contentLength = doc?.content?.length || 0;
-        console.log(`[${requestId}] Document ${index+1}: ${doc?.title || 'Untitled'} (content length: ${contentLength} chars)`);
-      });
-    } else {
-      console.warn(`[${requestId}] WARNING: documents is not an array: ${typeof data.documents}`);
+function prepareDebugResponse(startTime: number): DebugResponse {
+  const processingTimeMs = Date.now() - startTime;
+  
+  const debugResponse: DebugResponse = {
+    isNetlify,
+    storeUsed: null,
+    // netlifyContext: process.env.NETLIFY_BLOBS_CONTEXT, // Removed
+    // blobsEnabled: !!process.env.NETLIFY_BLOBS_CONTEXT, // Removed
+    storeCreated: false, // Will be updated if store is created
+    attemptedStorage: [], // Will track storage attempts
+    errors: {}, // Will track errors during storage attempts
+    timestamp: new Date().toISOString(),
+    processingTimeMs,
+    environment: {
+      NETLIFY: isNetlify,
+      NETLIFY_DEV: isNetlifyDev,
+      CWD: process.cwd(),
+      NODE_ENV: process.env.NODE_ENV
     }
-  } else {
-    console.log(`[${requestId}] Saving result without documents array`);
-  }
+  };
+  
+  return debugResponse;
+}
 
+/**
+ * Saves generation result using Netlify Blobs in production or local file system for local dev.
+ * 
+ * @param requestId - Unique identifier for the generation request
+ * @param result - Generation result to save
+ * @returns Promise<{success: boolean, location: string, debug: object}> - Result of save operation
+ */
+export async function saveGenerationResult(
+  requestId: string,
+  result: any
+): Promise<{ success: boolean; location: string; debug: DebugResponse }> {
+  const startTime = Date.now();
+  const debug = prepareDebugResponse(startTime);
+  
+  console.log(`[${requestId}] Environment detection for saving: isNetlify=${isNetlify}, isNetlifyDev=${isNetlifyDev}, CWD=${process.cwd()}`);
+  
+  // Add metadata to the result for tracking
+  const resultWithMeta = {
+    ...result,
+    _meta: {
+      savedAt: new Date().toISOString(),
+      environment: isNetlify ? 'netlify' : (isNetlifyDev ? 'netlify-dev' : 'local'),
+      version: '1.0.3', // Increment this when changing save format
+      requestId
+    }
+  };
+  
+  // Use Netlify Blobs if in a deployed Netlify environment (NOT Netlify Dev)
   if (isNetlify) {
-    // --- In production: Use Netlify Blobs ---
+    debug.attemptedStorage.push('netlify-blobs');
+    debug.storeUsed = 'netlify-blobs';
     try {
-      console.log(`[${requestId}] Using Netlify Blobs for storage (environment: ${process.env.NETLIFY_BLOBS_CONTEXT || 'unknown'})`);
+      console.log(`[${requestId}] Attempting to use Netlify Blobs (environment: deployed Netlify)`);
       
-      // Create a site-wide store using standard getStore method
-      const store = getStore(STORE_NAME);
+      // Log environment details relevant to Blobs SDK
+      console.log(`[${requestId}] Netlify Blobs Context Check:`, {
+        NETLIFY: process.env.NETLIFY,
+        NETLIFY_FUNCTION_NAME: process.env.NETLIFY_FUNCTION_NAME,
+        NETLIFY_SITE_ID: process.env.CONTEXT === 'dev' ? 'mock-site-id' : process.env.SITE_ID, // SITE_ID might not be available like this
+        NODE_VERSION: process.env.NODE_VERSION,
+        storeName: STORE_NAME,
+        key: requestId,
+        cwd: process.cwd()
+      });
       
-      // Add timestamp to metadata
-      const metadata = {
-        timestamp: new Date().toISOString(),
-        contentType: 'application/json',
-        environment: process.env.NETLIFY_BLOBS_CONTEXT || 'netlify'
+      // Get the store - This MUST work implicitly in a correctly configured v2 Netlify Function.
+      // If this fails, the function environment is likely misconfigured or saveGenerationResult
+      // is called outside the handler scope.
+      let store;
+      try {
+        store = getStore(STORE_NAME);
+        console.log(`[${requestId}] Successfully obtained Netlify Blobs store instance for '${STORE_NAME}'.`);
+        debug.storeCreated = true; // Indicates getStore succeeded
+      } catch (storeError: unknown) {
+        const error = storeError instanceof Error ? storeError : new Error(String(storeError));
+        console.error(`[${requestId}] CRITICAL: Failed to get Netlify Blobs store instance for '${STORE_NAME}'. Error: ${error.message}`, error.stack);
+        debug.errors.netlifyBlobsInit = `Failed to get store: ${error.message}`;
+        // In deployed Netlify, failure to get the store is critical. Do not fallback.
+        return {
+          success: false,
+          location: 'failed-init-blobs',
+          debug
+        };
+      }
+      
+      // Save the result to Netlify Blobs with strong consistency
+      const setOptions: SetOptions = { 
+        consistency: 'strong', // Ensure data is fully written before returning
+        metadata: {
+          timestamp: new Date().toISOString(),
+          requestType: result._meta?.version || 'unknown',
+          status: result.status || 'unknown'
+        }
       };
       
-      // Store using setJSON with metadata
-      await store.setJSON(requestId, data, { metadata });
-      
-      console.log(`[${requestId}] Result saved to Netlify Blobs store '${STORE_NAME}'`);
-      console.log(`[${requestId}] Blob saved at ${metadata.timestamp}`);
-      return true;
-    } catch (error: any) {
-      console.error(`[${requestId}] Error saving result to Netlify Blobs:`, error.message);
-      console.error(`[${requestId}] Stack trace:`, error.stack);
-      
-      // Log additional diagnostic information
-      if (error.code || error.statusCode) {
-        console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
-      }
-      
-      // Attempt to fallback to filesystem in case of Netlify Blobs failure
+      console.log(`[${requestId}] Saving result to Netlify Blobs with key: ${requestId}...`);
+      await store.setJSON(requestId, resultWithMeta, setOptions);
+      debug.attemptedStorage.push('netlify-blobs-set-success');
+      console.log(`[${requestId}] store.setJSON completed for key: ${requestId}`);
+
+      // --- Verification Step ---
       try {
-        console.log(`[${requestId}] Attempting filesystem fallback after Netlify Blobs failure`);
-        const filePath = path.join(tmpDir, `${requestId}.json`);
+        console.log(`[${requestId}] Verifying blob save by retrieving metadata (strong consistency)...`);
+        const metadataOptions: GetMetadataOptions = { consistency: 'strong' };
+        const metadata = await store.getMetadata(requestId, metadataOptions);
         
-        // Add metadata to the data
-        data._meta = {
-          savedAt: new Date().toISOString(),
-          environment: 'netlify-filesystem-fallback'
-        };
-        
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-        console.log(`[${requestId}] Result saved to Netlify filesystem fallback at: ${filePath}`);
-        return true;
-      } catch (fallbackError: any) {
-        console.error(`[${requestId}] Filesystem fallback also failed:`, fallbackError.message);
-        return false;
+        if (metadata) {
+          console.log(`[${requestId}] VERIFICATION SUCCESS: Blob metadata found after save:`, metadata);
+          debug.attemptedStorage.push('netlify-blobs-verify-success');
+        } else {
+          // This should ideally not happen with strong consistency on set/get
+          console.warn(`[${requestId}] VERIFICATION WARNING: Blob metadata NOT found after save, despite using strong consistency.`);
+          debug.errors.netlifyBlobsVerify = 'Metadata not found after save';
+           debug.attemptedStorage.push('netlify-blobs-verify-fail');
+        }
+      } catch (verifyError: unknown) {
+        const error = verifyError instanceof Error ? verifyError : new Error(String(verifyError));
+        console.error(`[${requestId}] VERIFICATION ERROR: Error retrieving metadata after save: ${error.message}`, error.stack);
+        debug.errors.netlifyBlobsVerify = `Verification failed: ${error.message}`;
+        debug.attemptedStorage.push('netlify-blobs-verify-error');
+        // Continue, as the write might have succeeded but verification failed.
       }
+      // --- End Verification Step ---
+      
+      console.log(`[${requestId}] Result successfully saved to Netlify Blobs.`);
+      return {
+        success: true,
+        location: `netlify-blobs://${STORE_NAME}/${requestId}`,
+        debug
+      };
+    } catch (netlifyError: unknown) {
+      const error = netlifyError instanceof Error ? netlifyError : new Error(String(netlifyError));
+      
+      console.error(`[${requestId}] CRITICAL: Error saving to Netlify Blobs: ${error.message}`, error.stack);
+      debug.errors.netlifyBlobsSet = error.message;
+      debug.attemptedStorage.push('netlify-blobs-set-fail');
+      
+      // No filesystem fallback in deployed Netlify environment.
+      return {
+        success: false,
+        location: 'failed-save-blobs',
+        debug
+      };
     }
   } else {
-    // --- In local development: Use filesystem ---
-    const filePath = path.join(tmpDir, `${requestId}.json`);
-    console.log(`[${requestId}] Local development: Saving to filesystem at ${filePath}`);
+    // Local development (including Netlify Dev) - use filesystem directly
+    debug.attemptedStorage.push('filesystem-direct');
+    debug.storeUsed = 'filesystem';
+    console.log(`[${requestId}] Local/Netlify Dev environment: saving to filesystem at ${localTmpDir}`);
+    // Use saveToFilesystem function (assuming it's defined below or imported)
+    // Note: Netlify Dev uses a sandboxed local store, NOT the production Blobs. 
+    // Filesystem is a reasonable approach for local dev persistence/inspection.
+    return await saveToFilesystem(requestId, resultWithMeta, debug);
+  }
+}
 
-    // Ensure the tmp directory exists locally
+/**
+ * Saves result to local filesystem (used for local dev / Netlify Dev).
+ * 
+ * @param requestId - Unique identifier for the generation request
+ * @param result - Generation result to save
+ * @param debug - Debug information to update
+ * @returns Promise<{success: boolean, location: string, debug: object}> - Result of save operation
+ */
+async function saveToFilesystem(
+  requestId: string,
+  result: any,
+  debug: DebugResponse
+): Promise<{ success: boolean; location: string; debug: DebugResponse }> {
+  try {
+    // Ensure tmp directory exists
+    await fs.mkdir(localTmpDir, { recursive: true });
+    console.log(`[${requestId}] Ensured local tmp directory exists: ${localTmpDir}`);
+    
+    // Save to temporary file
+    const filePath = path.join(localTmpDir, `${requestId}.json`);
+    await fs.writeFile(filePath, JSON.stringify(result, null, 2), 'utf-8');
+    console.log(`[${requestId}] Successfully saved result to local file: ${filePath}`);
+    debug.attemptedStorage.push('filesystem-success');
+    
+    // Verify the file was saved correctly by reading its stats
     try {
-      await fs.mkdir(tmpDir, { recursive: true });
-      console.log(`[${requestId}] Ensured local tmp directory exists: ${tmpDir}`);
-    } catch(error: any) {
-      console.error(`[${requestId}] Error ensuring local tmp directory exists:`, error.message);
-      return false;
+      const stats = await fs.stat(filePath);
+      console.log(`[${requestId}] File saved, size: ${stats.size} bytes, created: ${stats.birthtime}`);
+       debug.attemptedStorage.push('filesystem-verify-success');
+    } catch (verifyError: unknown) {
+      const error = verifyError instanceof Error ? verifyError : new Error(String(verifyError));
+      console.warn(`[${requestId}] Error verifying file save: ${error.message}`);
+      debug.errors.filesystemVerify = `Verification failed: ${error.message}`;
+      debug.attemptedStorage.push('filesystem-verify-error');
+      // Continue since the save itself might have succeeded
     }
     
-    // Write the file
-    try {
-      // Add timestamp and environment info to data
-      data._meta = {
-        savedAt: new Date().toISOString(),
-        environment: 'local-development'
-      };
-      
-      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-      console.log(`[${requestId}] Result saved to local file system at: ${filePath}`);
-      return true;
-    } catch (error: any) {
-      console.error(`[${requestId}] Error saving result to file:`, error.message);
-      return false;
-    }
+    return {
+      success: true,
+      location: `file://${filePath}`,
+      debug
+    };
+  } catch (error: unknown) {
+    const fsError = error instanceof Error ? error : new Error(String(error));
+    
+    console.error(`[${requestId}] Error saving to filesystem: ${fsError.message}`, fsError.stack);
+    debug.errors.filesystem = fsError.message;
+    debug.attemptedStorage.push('filesystem-fail');
+    
+    return {
+      success: false,
+      location: 'failed-to-save-filesystem',
+      debug
+    };
   }
 }

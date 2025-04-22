@@ -26,6 +26,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { withRetry } from '@/utils/index';
 import { saveGenerationResult } from '@/utils/saveResult';
 import { nanoid } from 'nanoid';
+import process from 'process';
 
 // For environments that have issues with the native fetch implementation
 import fetch from 'cross-fetch';
@@ -444,7 +445,7 @@ async function generateWithGemini(
       retries: 2,
       retryDelayMs: 1500,
       isBackground,
-      errorMessage: `Gemini API Call (${requestId})`
+      timeoutMs: isBackground ? 840000 : 60000 // Use longer timeout for background functions
     });
 
     // --- Robust Response Validation ---
@@ -543,25 +544,25 @@ async function generateWithOpenAI(
   try {
     // Use withRetry utility for better error handling and retries
     const completionFn = () => openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages: [
-        {
-          role: "system",
+        model: OPENAI_MODEL,
+        messages: [
+          { 
+            role: "system", 
           content: "You are a technical documentation generator that outputs valid JSON only. Your responses must be parseable JSON objects."
-        },
+          },
         {
           role: "user",
           content: prompt
         }
-      ],
+        ],
       response_format: { type: "json_object" },
-      max_tokens: TOKEN_LIMITS.openai,
+        max_tokens: TOKEN_LIMITS.openai,
       temperature: 0.7,
     });
 
     const completion = await withRetry(completionFn, {
-      retries: 2,
-      retryDelayMs: 1500,
+        retries: 2,
+        retryDelayMs: 1500,
       timeoutMs: isBackground ? 840000 : 10000, // 14 minutes for background, 10 seconds for regular
       isBackground
     });
@@ -579,9 +580,9 @@ async function generateWithOpenAI(
       responseText,
       modelUsed: OPENAI_MODEL,
       tokens: {
-        input: completion.usage?.prompt_tokens || 0,
-        output: completion.usage?.completion_tokens || 0,
-        total: completion.usage?.total_tokens || 0
+      input: completion.usage?.prompt_tokens || 0,
+      output: completion.usage?.completion_tokens || 0,
+      total: completion.usage?.total_tokens || 0
       }
     };
   } catch (error: any) {
@@ -613,10 +614,8 @@ async function generateWithAnthropic(
       {
         retries: 2,
         retryDelayMs: 1500,
-        onRetry: (attempt, error, willRetry) => console.warn(`[${requestId}] Anthropic attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. ${willRetry ? 'Retrying...' : 'Giving up.'}`),
         isBackground,
-        timeoutMs: isBackground ? 840000 : 60000, // Use longer timeout for background functions
-        errorMessage: `Anthropic API call timed out for model ${ANTHROPIC_MODEL}`
+        timeoutMs: isBackground ? 840000 : 60000 // Use longer timeout for background functions
       }
     );
 
@@ -677,8 +676,54 @@ export default async function handler(
   console.info(`[${requestId}] Starting documentation generation request`);
 
   try {
-    const { details, docs: selectedDocs, background = true } = req.body;
+    const { details, docs: selectedDocs, provider = 'openai', apiKey, background = true } = req.body;
     console.info(`[${requestId}] Background Processing: ${background}`);
+    
+    // Log the raw selectedDocs object from the request
+    console.log(`[${requestId}] Raw selectedDocs from request:`, JSON.stringify(selectedDocs));
+
+    // Validate required fields
+    if (!details || !selectedDocs || !apiKey) {
+      console.error(`[${requestId}] Missing required fields in request`);
+      return res.status(400).json({ 
+        status: 'failed',
+        error: 'Missing required fields: details, selectedDocs, and apiKey are required', 
+        requestId 
+      });
+    }
+
+    // Convert selectedDocs object to array of keys where value is true
+    // Fix: Check that selectedDocs is properly structured 
+    if (typeof selectedDocs !== 'object') {
+      console.error(`[${requestId}] Invalid selectedDocs format: ${typeof selectedDocs}`);
+      return res.status(400).json({
+        status: 'failed',
+        error: 'Invalid selectedDocs format. Expected an object with boolean values.',
+        requestId
+      });
+    }
+
+    // Fix: Ensure proper parsing of selectedDocs object to extract document keys
+    const selectedDocKeys = Object.entries(selectedDocs)
+      .filter(([key, value]) => {
+        // Add debug logs for each key-value pair
+        console.log(`[${requestId}] Document selection: key=${key}, value=${value}, type=${typeof value}`);
+        return Boolean(value); // Convert any truthy value to true
+      })
+      .map(([key]) => key);
+
+    console.log(`[${requestId}] Processed selectedDocKeys:`, selectedDocKeys);
+
+    // Validate that at least one document is selected BEFORE building the prompt
+    if (selectedDocKeys.length === 0) {
+      console.error(`[${requestId}] No documents selected`);
+      // Return error immediately if no documents are selected
+      return res.status(400).json({
+        status: 'failed',
+        error: 'Please select at least one document type to generate',
+        requestId
+      });
+    }
 
     // For background functions, return immediately with 202
     if (background) {
@@ -686,21 +731,164 @@ export default async function handler(
       res.setHeader('X-Netlify-Background', 'true');
       
       // Return 202 Accepted immediately
-      return res.status(202).json({
+      const response = {
         status: 'processing',
         message: 'Documentation generation started',
         requestId
-      });
-    }
+      };
+      
+      // Process in background
+      process.nextTick(async () => {
+        try {
+    // Build the prompt from project details and selected documents
+          const prompt = buildPrompt(details, selectedDocs);
+    console.log(`[${requestId}] Built prompt for ${selectedDocKeys.length} document types`);
+    
+          // Log the first 500 chars of the prompt
+    console.log(`[${requestId}] Prompt preview (first 500 chars): ${prompt.substring(0, 500)}...`);
 
-    // For non-background requests, process normally
-    // ... rest of your existing processing code ...
+    // Process response based on provider
+    let result: { responseText: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
+        
+      console.log(`[${requestId}] Starting generation with ${provider} provider`);
+
+          try {
+    switch (provider.toLowerCase()) {
+        case 'gemini':
+          // Try the primary model first, fall back to alternative if needed
+          try {
+                  result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, true);
+          } catch (error: any) {
+            console.log(`[${requestId}] Primary Gemini model failed, trying fallback: ${error.message}`);
+                  result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, true);
+          }
+          break;
+      case 'openai':
+                result = await generateWithOpenAI(apiKey, prompt, requestId, true);
+        break;
+      case 'anthropic':
+                result = await generateWithAnthropic(apiKey, prompt, requestId, true);
+        break;
+      default:
+                const errorData = {
+            status: 'failed',
+                  message: `Invalid provider: ${provider}. Supported providers are: gemini, openai, anthropic`,
+            requestId
+                };
+        await saveGenerationResult(requestId, errorData);
+                return;
+    }
+    
+    // Process the raw response text into structured data
+    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}): ${result.responseText.substring(0, 200)}...`);
+    
+    // Add detailed logging of the ENTIRE raw response for debugging
+    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}):`, result.responseText);
+    
+            // Parse response
+      if (!result.responseText || result.responseText.trim() === '') {
+        throw new Error('Empty response received from AI provider');
+      }
+      
+      // Try to parse the JSON response from the AI
+      let parsedResponse: StructuredGenerationResponse;
+      try {
+        parsedResponse = JSON.parse(result.responseText);
+      } catch (jsonError: any) {
+        console.error(`[${requestId}] Failed to parse AI response: ${jsonError.message}`);
+        // Try to clean up the response if it might be wrapped in markdown code blocks
+        const cleanedResponse = result.responseText.replace(/^```json\s*([\s\S]*?)\s*```$/g, '$1').trim();
+        try {
+          parsedResponse = JSON.parse(cleanedResponse);
+          console.log(`[${requestId}] Successfully parsed JSON after cleaning markdown code blocks`);
+        } catch (secondError) {
+                // If still failing, throw an error
+          throw jsonError;
+        }
+      }
+      
+      // Convert the response to documents array format expected by the client
+      const documents = Object.entries(parsedResponse).map(([title, content]) => ({
+        title,
+        content: typeof content === 'string' ? content : JSON.stringify(content)
+      }));
+      
+      if (documents.length === 0) {
+        throw new Error('No documents were generated from non-empty response');
+      }
+      
+      // Create final response with debug info
+      const responseData: ApiResponseType = {
+        status: 'completed',
+        message: 'Documents generated successfully',
+        documents,
+        requestId,
+        debug: {
+          provider,
+          model: result.modelUsed,
+          timestamp: new Date().toISOString(),
+          processingTimeMs: Date.now() - new Date().getTime(),
+          contentLength: result.responseText.length,
+          tokensUsed: result.tokens
+        }
+      };
+      
+            // Store the response in Netlify Blobs
+            const saveResult = await saveGenerationResult(requestId, responseData);
+            if (!saveResult) {
+              console.error(`[${requestId}] Failed to save result to storage`);
+            }
+          } catch (error: any) {
+            // Log and save the error
+            console.error(`[${requestId}] Error in background processing:`, error);
+      
+      // Create error response
+      const errorData: ApiResponseType = {
+        status: 'failed',
+              message: error.message || 'An error occurred during document generation',
+              error: error.message || 'Unknown error',
+        requestId,
+        debug: {
+          provider,
+          timestamp: new Date().toISOString(),
+                error: error.stack || error.message
+        }
+      };
+      
+            // Store the error response
+        await saveGenerationResult(requestId, errorData);
+          }
+        } catch (backgroundError: any) {
+          console.error(`[${requestId}] Fatal error in background processing:`, backgroundError);
+          
+          // Ensure we save something even in case of a catastrophic error
+          const fatalErrorData = {
+            status: 'failed',
+            message: 'Fatal error during background processing',
+            error: backgroundError.message || 'Unknown background error',
+            requestId
+          };
+          
+          await saveGenerationResult(requestId, fatalErrorData);
+        }
+      });
+      
+      return res.status(202).json(response);
+    }
+    
+    // For non-background requests, process synchronously
+    // ... existing synchronous processing code ...
+    return res.status(200).json({
+      status: 'unsupported',
+      message: 'Non-background processing is not supported in this version',
+      requestId
+    });
 
   } catch (error) {
     console.error(`[${requestId}] Error:`, error);
     
     // Return appropriate error response
-    return res.status(500).json({
+    return res.status(500).json({ 
       status: 'failed',
       message: 'Failed to start generation',
       error: error instanceof Error ? error.message : 'Unknown error',
