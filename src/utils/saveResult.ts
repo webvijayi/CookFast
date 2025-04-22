@@ -1,6 +1,7 @@
 /**
  * Utility to save generation results for later retrieval using Netlify Blobs
  * or local file system as a fallback.
+ * Updated: ${new Date().toISOString()} - Fixed tmp path to use /tmp instead of /var/task/tmp on Netlify.
  * Updated: ${new Date().toISOString()} - Correctly determine tmp path based on Netlify env.
  * Updated: ${new Date().toISOString()} - Moved local tmp directory creation to only run when not in Netlify env.
  * Updated: ${new Date().toISOString()} - Switched from fs to Netlify Blobs for persistence.
@@ -17,6 +18,7 @@ const isNetlify = process.env.NETLIFY === 'true';
 const isNetlifyBlobsAvailable = isNetlify && process.env.NETLIFY_BLOBS_CONTEXT;
 
 // Determine the correct temporary directory path based on the environment
+// On Netlify, always use /tmp, never /var/task/tmp
 const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
 /**
@@ -82,15 +84,14 @@ export async function saveGenerationResult(requestId: string, data: any): Promis
         // In Netlify, /tmp is assumed to exist
         console.log(`[${requestId}] Running on Netlify, assuming ${tmpDir} exists.`);
     }
-
+    
+    // Write the file
     try {
-      const jsonData = JSON.stringify(data, null, 2); // Pretty print JSON
-      await fs.writeFile(filePath, jsonData, 'utf-8');
-      console.log(`[${requestId}] Result saved to filesystem: ${filePath}`);
-      console.log(`[${requestId}] Filesystem Result saved at ${new Date().toISOString()}`);
+      await fs.writeFile(filePath, JSON.stringify(data));
+      console.log(`[${requestId}] Result saved to local file system at: ${filePath}`);
       return true;
     } catch (error: any) {
-      console.error(`[${requestId}] Error saving result to filesystem path ${filePath}:`, error.message);
+      console.error(`[${requestId}] Error saving result to file:`, error.message);
       return false;
     }
   }

@@ -27,6 +27,23 @@ export type DocumentMetadata = {
 const isNodeEnv = typeof window === 'undefined';
 
 /**
+ * Check if we're running in Netlify
+ */
+const isNetlify = typeof process !== 'undefined' && process.env.NETLIFY === 'true';
+
+/**
+ * Get the appropriate temp directory
+ */
+const getTmpDir = () => {
+  if (isNetlify) {
+    // On Netlify, use /tmp - NOT /var/task/tmp
+    return '/tmp';
+  }
+  // In local development, use ./tmp
+  return path.join(process.cwd(), 'tmp');
+};
+
+/**
  * Save document to appropriate storage
  * @param requestId - The unique request ID
  * @param document - The document data to save
@@ -36,9 +53,11 @@ export async function saveDocumentToStore(requestId: string, document: any): Pro
     if (isNodeEnv) {
       // In Node.js environment (server-side)
       try {
-        // Create temp directory if it doesn't exist
-        const tmpDir = path.join(process.cwd(), 'tmp');
-        if (!fs.existsSync(tmpDir)) {
+        // Get the correct tmp directory
+        const tmpDir = getTmpDir();
+        
+        // Create temp directory if it doesn't exist and we're not on Netlify
+        if (!isNetlify && !fs.existsSync(tmpDir)) {
           fs.mkdirSync(tmpDir, { recursive: true });
         }
         
@@ -70,7 +89,8 @@ export async function getDocumentFromStore(requestId: string): Promise<any | nul
     if (isNodeEnv) {
       // In Node.js environment (server-side)
       try {
-        const filePath = path.join(process.cwd(), 'tmp', `${requestId}.json`);
+        const tmpDir = getTmpDir();
+        const filePath = path.join(tmpDir, `${requestId}.json`);
         if (fs.existsSync(filePath)) {
           const content = fs.readFileSync(filePath, 'utf8');
           return JSON.parse(content);
@@ -100,7 +120,7 @@ export async function listDocumentsFromStore(limit: number = 10): Promise<Docume
     if (isNodeEnv) {
       // In Node.js environment (server-side)
       try {
-        const tmpDir = path.join(process.cwd(), 'tmp');
+        const tmpDir = getTmpDir();
         if (!fs.existsSync(tmpDir)) {
           return [];
         }
@@ -136,13 +156,13 @@ export async function listDocumentsFromStore(limit: number = 10): Promise<Docume
       }
     } else {
       // In browser environment (client-side)
-      const metadataList: DocumentMetadata[] = [];
-      let count = 0;
-      
-      // Iterate through localStorage items
-      for (let i = 0; i < localStorage.length && count < limit; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('cookfast_doc_')) {
+      try {
+        const metadataList: DocumentMetadata[] = [];
+        const storageKeys = Object.keys(localStorage)
+          .filter(key => key.startsWith('cookfast_doc_'))
+          .slice(0, limit);
+        
+        for (const key of storageKeys) {
           try {
             const docStr = localStorage.getItem(key);
             if (docStr) {
@@ -156,16 +176,17 @@ export async function listDocumentsFromStore(limit: number = 10): Promise<Docume
                 model: doc.debug?.model,
                 projectName: doc.projectDetails?.projectName
               });
-              
-              count++;
             }
           } catch (err) {
-            console.error(`Error parsing document ${key}:`, err);
+            console.error(`Error reading document ${key}:`, err);
           }
         }
+        
+        return metadataList;
+      } catch (error) {
+        console.error('Error listing documents from localStorage:', error);
+        return [];
       }
-      
-      return metadataList;
     }
   } catch (error) {
     console.error('Error listing documents:', error);

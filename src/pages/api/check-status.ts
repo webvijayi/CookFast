@@ -4,8 +4,10 @@ import fs from 'fs/promises';
 import path from 'path';
 
 // Determine if running in Netlify environment with Blobs configured
-const isNetlifyBlobsAvailable = process.env.NETLIFY === 'true' && process.env.NETLIFY_BLOBS_CONTEXT;
-const localTmpDir = path.join(process.cwd(), 'tmp');
+const isNetlify = process.env.NETLIFY === 'true';
+const isNetlifyBlobsAvailable = isNetlify && process.env.NETLIFY_BLOBS_CONTEXT;
+// Use correct tmp path depending on environment - on Netlify it's always /tmp
+const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
 // Unified function to get document from store (Blobs or Local FS)
 async function getDocumentFromStore(requestId: string): Promise<any | null> {
@@ -28,7 +30,7 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
   } else {
     // --- Read from Local File System (Fallback) ---
     try {
-      const filePath = path.join(localTmpDir, `${requestId}.json`);
+      const filePath = path.join(tmpDir, `${requestId}.json`);
       const fileData = await fs.readFile(filePath, 'utf-8');
       const document = JSON.parse(fileData);
       console.log(`[${requestId}] Successfully retrieved result from local file: ${filePath}`);
@@ -36,7 +38,7 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
     } catch (error: any) {
       // If file not found (ENOENT) or other error, assume it's processing or doesn't exist
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[${requestId}] Error reading result from local file ${localTmpDir}:`, error.message);
+        console.error(`[${requestId}] Error reading result from local file ${tmpDir}:`, error.message);
       } else {
         console.log(`[${requestId}] No result found in local tmp directory.`);
       }

@@ -1026,123 +1026,33 @@
 4. Implement proper progress tracking for background document generation
 5. Add unit tests to validate function behavior in different environments
 
-## ${new Date().toISOString()} - Local Storage Fallback for Generation Results
-
-- **Modified `src/utils/saveResult.ts`:** Updated to check for Netlify Blob availability (`process.env.NETLIFY_BLOBS_CONTEXT`). If unavailable (e.g., running locally), it now saves generation results as JSON files to the `./tmp/` directory.
-- **Modified `src/pages/api/check-status.ts`:** Implemented corresponding logic. It now attempts to retrieve results from Netlify Blobs first, falling back to reading from the local `./tmp/` directory if Blobs are unavailable.
-- **Checked `.gitignore`:** Confirmed that the `tmp/` directory is ignored, preventing local results from being committed.
-- **Context:** This allows the document generation status check to function correctly during local development and testing where Netlify Blobs are not accessible.
-
-## ${new Date().toISOString()} - Fix Netlify Function Timeout for Background Execution
-
-- Modified `src/pages/api/generate-docs.ts`:
-  - Updated `performGeneration` and the specific AI provider functions (`generateWithGemini`, `generateWithOpenAI`, `generateWithAnthropic`) to accept an `isBackground` boolean parameter.
-  - Ensured this `isBackground` flag is correctly passed down from the main handler function to the `withRetry` utility.
-  - **Issue:** The `withRetry` utility was not receiving the `isBackground` status, causing it to use the default (shorter) timeout even for background function invocations, leading to 10-second timeouts and 502 errors.
-  - **Fix:** By passing the `isBackground` flag, the `withRetry` utility can now correctly calculate and apply the appropriate timeout (10 seconds for synchronous, potentially up to 15 minutes for background), resolving the 502 errors caused by premature timeouts during longer AI generation tasks.
-
-## ${new Date().toISOString()} - Added Frontend Option for Background Generation
-
-- Modified `src/components/EnhancedForm.tsx`:
-  - Added a state variable `runInBackground`.
-  - Added a `Checkbox` component to the final step (Document Selection) allowing users to opt-in to background generation.
-  - Updated the `onSubmit` prop type and the `handleSubmit` function to pass the `runInBackground` boolean value to the parent.
-- Modified `src/components/GeneratorSection.tsx`:
-  - Added a state variable `runInBackground` to receive the user's choice from the form.
-  - Updated the `handleFormSubmit` function to accept the `runInBackground` flag.
-  - Conditionally added the `X-Netlify-Background: true` header to the `fetch` request to `/api/generate-docs` only when the `runInBackground` flag is true.
-- **Context:** This addresses the root cause of the 502 errors by allowing the frontend to correctly trigger Netlify's background function execution when needed (for potentially long-running AI tasks), thus avoiding the standard 10-second timeout.
-
-## 2025-04-22 - Refined the prompt in `src/pages/api/generate-docs.ts` for better documentation quality based on Manus example. Attempted to remove background task checkbox and default to background generation in `src/pages/index.tsx` (manual edit required due to automated failures).
-
-## 2025-04-23 - Made Background Task Processing Default with UI Simplification
+## 2024-04-22 - Fixed Temporary Directory Path Issues on Netlify
 
 ### Development Steps
-1. Modified `src/components/EnhancedForm.tsx`:
-   - Removed the "Run as Background Task" checkbox UI
-   - Set `runInBackground` state to `true` by default
-   - Updated `handleSubmit` function to always pass `true` for background processing
+1. Updated `src/utils/saveResult.ts` to use the correct temporary directory path:
+   - Fixed the issue where it was trying to use `/var/task/tmp` instead of `/tmp` on Netlify
+   - Added better path detection logic to ensure proper temporary directory use in different environments
+   - Improved error handling and logging for better debugging
 
-2. Updated `src/components/GeneratorSection.tsx`:
-   - Modified `handleFormSubmit` to ignore the passed `runInBackgroundFlag` parameter
-   - Added a constant `useBackgroundProcessing = true` to enforce background processing
-   - Changed the headers logic to always include `X-Netlify-Background: true` in API requests
-   - Updated all debug logs with the appropriate background state
+2. Updated `src/pages/api/check-status.ts` for consistency:
+   - Aligned the temporary directory path logic with saveResult.ts
+   - Added environment detection to properly handle the Netlify environment
+   - Ensured all file operations use the correct path
 
-### Key Decisions
-- Made background task execution the default behavior without user option
-- Simplified the UI by removing an unnecessary toggle
-- Ensured all document generation tasks utilize Netlify's background function infrastructure
-- Removed conditional logic around background processing to make the code more maintainable
-
-### Next Steps
-- Thorough testing of document generation to verify background processing works in all cases
-- Monitoring of Netlify function logs to confirm proper function execution
-- Considering additional user feedback mechanisms for background task status
-
-## 2023-06-17 - Fixed Enhanced Form Menu Link
-
-### Development Steps
-1. Changed the `id="generator"` to `id="generate"` in `src/components/GeneratorSection.tsx` to match the menu item link in the Header component.
+3. Enhanced `src/utils/documentStore.ts` with proper path handling:
+   - Added a new helper function `getTmpDir()` to centralize path logic
+   - Improved detection of Netlify environment
+   - Added conditional directory creation to avoid attempting to create directories on Netlify
 
 ### Key Decisions
-- Kept the `#generate` anchor as is since it's being used in multiple places across the application.
-- Opted to change the section ID rather than updating all anchor references for minimal impact.
+- Used Netlify's `/tmp` directory for temporary file storage instead of trying to write to the read-only `/var/task/tmp`
+- Maintained the existing background function configuration in netlify.toml which is correct
+- Implemented consistent path handling across all utilities that interact with temporary files
+- Added better environment detection to ensure the code behaves properly in both local and Netlify environments
 
 ### Next Steps
-- Consider standardizing naming conventions for section IDs and their corresponding anchor links.
-
-## 2024-08-20
-- Fixed Download and Copy-to-Clipboard functionality in results display
-- Fixed an issue where generatedMarkdown was not being set correctly for download/copy
-- Fixed document generation to properly use project details instead of defaulting to "web vijayi agency website" content
-- Enhanced buildPrompt function with explicit instructions to prevent AI from generating fictional website content
-- Added safeguards for missing or incomplete project details to prevent generic fictional content
-- Improved error handling for generatedMarkdown to ensure proper state management
-- Added better document debugging in saveResult utility for easier troubleshooting
-- Updated combined markdown generation to properly join document sections for download/copy
-
-## 2023-10-21
-- Fixed JSON parsing error in generate-docs API that was preventing documents from displaying on frontend
-- Improved error handling for AI responses wrapped in markdown code blocks  
-- Enhanced document structure validation in check-status API to provide better error messages
-- Fixed prop type error in ResultsPanel component by adding missing isGenerating prop
-- Added user-friendly fallback document when AI providers return empty or invalid responses
-- Fixed download markdown and copy-to-clipboard functionality in results display
-- Fixed document generation to properly use project details instead of defaulting to fictional website content
-- Improved error handling for cases with missing or incomplete project details
-- Enhanced document debugging in saveResult utility with better validation and tracking
-
-## 2024-08-21 - Fixed Download/Copy Functionality and Document Generation Issues
-
-### Development Steps
-1. Fixed several issues in document generation and content handling:
-   - Resolved issues with download and copy-to-clipboard functionality in results display
-   - Fixed content streaming and rendering in the ResultsPanel component
-   - Corrected state management for generatedMarkdown during download/copy operations
-   - Improved document generation to properly use project details instead of generic content
-   - Enhanced combined markdown generation to properly join document sections
-
-2. Improved error handling and validation:
-   - Added proper validation for JSON responses from AI providers
-   - Implemented safeguards for missing or incomplete project details
-   - Enhanced error handling for generatedMarkdown to ensure proper state management
-   - Added more robust document debugging in saveResult utility
-
-3. Enhanced prompt engineering:
-   - Updated buildPrompt function with explicit instructions to prevent fictional content generation
-   - Added specific instructions to prevent AI from generating generic website descriptions
-   - Improved document structure validation for more consistent results
-
-### Key Decisions
-- Used defensive programming techniques to handle potential undefined or null values
-- Improved data flow between components to ensure proper state updates
-- Enhanced error feedback to provide more useful information to users
-- Applied stricter validation of AI responses to prevent invalid content
-
-### Next Steps
-1. Add comprehensive unit tests for document generation workflow
-2. Consider implementing content validation rules for each document type
-3. Explore implementing progress indicators during document generation
-4. Add telemetry to track common patterns in document generation errors
-5. Consider adding offline templates as fallbacks when AI generation fails
+1. Monitor function logs to ensure the directory path issue is fully resolved
+2. Consider implementing a more robust storage solution using Netlify Blobs for all document storage
+3. Add more comprehensive error handling and recovery mechanisms
+4. Add unit tests to verify proper functionality in different environments
+5. Implement proper cleanup routines to manage temporary files
