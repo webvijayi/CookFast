@@ -3,44 +3,87 @@ import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Determine if running in Netlify environment with Blobs configured
+// Determine if running in Netlify environment
 const isNetlify = process.env.NETLIFY === 'true';
-const isNetlifyBlobsAvailable = isNetlify && process.env.NETLIFY_BLOBS_CONTEXT;
-// Use correct tmp path depending on environment - on Netlify it's always /tmp
-const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
-// Unified function to get document from store (Blobs or Local FS)
+// Use consistent store name for all generation results - must match saveResult.ts
+const STORE_NAME = 'generationResults';
+
+// Determine the correct temporary directory path for local development only
+const tmpDir = path.join(process.cwd(), 'tmp');
+
+/**
+ * Retrieves document generation result from Netlify Blobs in production
+ * or local file system during local development.
+ * 
+ * @param requestId - Unique identifier for this generation request
+ * @returns Promise<any|null> - The stored document data or null if not found
+ */
 async function getDocumentFromStore(requestId: string): Promise<any | null> {
-  if (isNetlifyBlobsAvailable) {
-    // --- Read from Netlify Blobs ---
+  if (isNetlify) {
+    // --- In production: Use Netlify Blobs ---
     try {
-      const store = getStore('generationResults');
-      const document = await store.get(requestId, { type: 'json' });
+      // Create a site-wide store using standard getStore method
+      const store = getStore(STORE_NAME);
+      
+      // Retrieve the document with JSON parsing
+      const document = await store.get(requestId, { 
+        type: 'json',
+        // Use strong consistency to ensure we get the latest data
+        consistency: 'strong'
+      });
+      
       if (!document) {
-        console.log(`[${requestId}] No result found in Netlify Blobs store 'generationResults'.`);
+        console.log(`[${requestId}] No result found in Netlify Blobs store '${STORE_NAME}'`);
         return null;
       }
-      console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs.`);
+      
+      console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs`);
+      
+      // Optionally retrieve metadata for additional debugging
+      try {
+        const metadata = await store.getMetadata(requestId);
+        if (metadata) {
+          console.log(`[${requestId}] Metadata retrieved: saved at ${metadata.metadata?.timestamp || 'unknown time'}`);
+        }
+      } catch (metaError: any) {
+        // Non-critical error, just log it
+        console.warn(`[${requestId}] Could not retrieve metadata: ${metaError.message}`);
+      }
+      
       return document;
     } catch (error: any) {
-      console.error(`[${requestId}] Error reading document from Netlify Blobs store:`, error.message);
-      // If Blobs configured but error reading, return null to indicate potential processing
+      console.error(`[${requestId}] Error reading document from Netlify Blobs:`, error.message);
+      console.error(`[${requestId}] Stack trace:`, error.stack);
+      
+      // Log additional diagnostic information
+      if (error.code || error.statusCode) {
+        console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
+      }
+      
       return null;
     }
   } else {
-    // --- Read from Local File System (Fallback) ---
+    // --- In local development: Use filesystem ---
     try {
       const filePath = path.join(tmpDir, `${requestId}.json`);
+      console.log(`[${requestId}] Local development: Reading from filesystem at ${filePath}`);
+      
       const fileData = await fs.readFile(filePath, 'utf-8');
       const document = JSON.parse(fileData);
       console.log(`[${requestId}] Successfully retrieved result from local file: ${filePath}`);
+      
+      if (document._meta) {
+        console.log(`[${requestId}] Local file saved at: ${document._meta.savedAt || 'unknown time'}`);
+      }
+      
       return document;
     } catch (error: any) {
       // If file not found (ENOENT) or other error, assume it's processing or doesn't exist
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[${requestId}] Error reading result from local file ${tmpDir}:`, error.message);
+        console.error(`[${requestId}] Error reading result from local file:`, error.message);
       } else {
-        console.log(`[${requestId}] No result found in local tmp directory.`);
+        console.log(`[${requestId}] No result found in local tmp directory`);
       }
       return null;
     }
@@ -62,9 +105,10 @@ type StatusResponse = {
 };
 
 /**
- * Check-Status API endpoint (Updated for Netlify Blobs / Local FS Fallback)
- *
- * Retrieves document generation results from the appropriate store.
+ * Check-Status API endpoint
+ * 
+ * Retrieves document generation results from Netlify Blobs in production
+ * or from local filesystem during development.
  *
  * @param req - NextApiRequest object
  * @param res - NextApiResponse object
@@ -124,6 +168,7 @@ export default async function handler(
     // Add debug info in headers (won't affect the response but helps with debugging)
     res.setHeader('X-Request-ID', requestId);
     res.setHeader('X-Processing-Time', new Date().toISOString());
+    res.setHeader('X-Storage-Method', isNetlify ? 'Netlify-Blobs' : 'Local-Filesystem');
 
     // Check for results using our document store utility
     const document = await getDocumentFromStore(requestId);
@@ -207,29 +252,26 @@ export default async function handler(
       });
     }
     
-    // If no document was found, it's still processing.
-    console.log(`[${requestId}] Result not yet available in store. Assuming processing.`);
-    const statusResponse: StatusResponse = {
+    // If no document, assume it's processing
+    console.log(`[${requestId}] No document found in store, assuming processing`);
+    
+    // Return processing status to client
+    return res.status(202).json({
       status: 'processing',
-      message: `Your document generation is still in progress. Checking ${isNetlifyBlobsAvailable ? 'Netlify Blobs' : 'local storage'}...`,
-      progress: 50, // Placeholder progress
-      note: 'Background functions may take several minutes. Refresh later to check again.',
-      timestamp: new Date().toISOString(),
+      message: 'Document generation is still in progress...',
+      progress: 0, // Unknown progress
       requestId
-    };
-
-    // Return processing status
-    res.setHeader('Cache-Control', 'private, max-age=10'); // Cache for 10 seconds
-    return res.status(200).json(statusResponse);
-
+    });
   } catch (error: any) {
-    const errorRequestId = requestId || 'unknown'; // Use requestId if available
-    console.error(`[${errorRequestId}] General error in check-status handler: ${error.message}`, error.stack);
+    // Handle any unexpected errors
+    console.error(`[${requestId || 'unknown'}] Unexpected error in check-status:`, error.message);
+    console.error(error.stack);
+    
     return res.status(500).json({
       status: 'failed',
-      message: 'Error checking generation status',
-      error: error.message || 'Unknown error',
-      requestId: errorRequestId // Include requestId in error response
+      message: 'An unexpected error occurred while checking generation status',
+      error: 'Internal server error',
+      requestId
     });
   }
 }

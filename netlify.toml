@@ -33,6 +33,13 @@
   node_bundler = "esbuild"
   background = true
 
+# Environment variables configuration
+[build.environment]
+  # Set Netlify Blobs context - This variable is automatically set by Netlify but defining it here ensures it's available
+  NETLIFY_BLOBS_CONTEXT = "production"
+  # Node version
+  NODE_VERSION = "18"
+
 # Edge Function configuration for Open Graph image generation
 [[edge_functions]]
   function = "og"

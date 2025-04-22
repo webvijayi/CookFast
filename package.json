@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "netlify:dev": "netlify dev",
+    "netlify:blobs:list": "netlify blobs:list",
+    "netlify:blobs:delete": "netlify blobs:delete"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -52,6 +55,7 @@
     "browserslist": "^4.21.10",
     "eslint": "^9",
     "eslint-config-next": "15.2.5",
+    "netlify-cli": "^17.21.3",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"

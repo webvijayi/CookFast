@@ -127,6 +127,30 @@ Found CookFast helpful? Here are a few ways you can support the project:
 
 This application is configured for deployment on platforms like Netlify or Vercel which support Next.js applications with API routes. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
 
+### Netlify Blobs Integration
+
+CookFast uses Netlify Blobs for storing generated documents in production environments:
+
+- **Zero Configuration**: Netlify Blobs is automatically configured when deployed on Netlify
+- **Persistent Storage**: Documents are stored persistently even through redeployments
+- **Local Development**: In local development, files are stored in the `tmp` directory as a fallback
+- **High Availability**: Netlify Blobs provides a highly-available, scalable storage solution
+
+To work with Netlify Blobs locally, you can use the following commands:
+
+```bash
+# Start Netlify dev environment
+npm run netlify:dev
+
+# List all blobs in the store
+npm run netlify:blobs:list
+
+# Delete a specific blob
+npm run netlify:blobs:delete generationResults/YOUR_REQUEST_ID
+```
+
+For more information about Netlify Blobs, see the [documentation](.docs/netlify-blobs.md).
+
 ---
 
 ## Learn More (Default Next.js Info)

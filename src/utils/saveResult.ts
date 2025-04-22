@@ -1,12 +1,14 @@
 /**
  * Utility to save generation results for later retrieval using Netlify Blobs
  * or local file system as a fallback.
+ * Updated: ${new Date().toISOString()} - Prioritized Netlify Blobs for production, removed conditional NETLIFY_BLOBS_CONTEXT check.
  * Updated: ${new Date().toISOString()} - Fixed tmp path to use /tmp instead of /var/task/tmp on Netlify.
  * Updated: ${new Date().toISOString()} - Correctly determine tmp path based on Netlify env.
  * Updated: ${new Date().toISOString()} - Moved local tmp directory creation to only run when not in Netlify env.
  * Updated: ${new Date().toISOString()} - Switched from fs to Netlify Blobs for persistence.
  * Updated: 2023-11-20 - Added Netlify compatibility for tmp directory (now deprecated).
  * Updated: 2023-10-21 - Added enhanced debug logging for document content structure.
+ * Updated: 2025-04-22 - Removed filesystem fallback for production, enhanced Netlify Blobs implementation.
  */
 import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
@@ -14,16 +16,20 @@ import path from 'path';
 
 // Determine if running in Netlify environment
 const isNetlify = process.env.NETLIFY === 'true';
-// Determine if Netlify Blobs specifically are available
-const isNetlifyBlobsAvailable = isNetlify && process.env.NETLIFY_BLOBS_CONTEXT;
 
-// Determine the correct temporary directory path based on the environment
-// On Netlify, always use /tmp, never /var/task/tmp
-const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
+// Use consistent store name for all generation results
+const STORE_NAME = 'generationResults';
+
+// Determine the correct temporary directory path for local development only
+const tmpDir = path.join(process.cwd(), 'tmp');
 
 /**
- * Save document generation result to Netlify Blobs (if available)
- * or local file system (as fallback) for later retrieval.
+ * Save document generation result to Netlify Blobs in production
+ * or local file system (as fallback) during local development.
+ * 
+ * @param requestId - Unique identifier for this generation request
+ * @param data - The data to save
+ * @returns Promise<boolean> - True if save was successful
  */
 export async function saveGenerationResult(requestId: string, data: any): Promise<boolean> {
   // Log document structure for debugging
@@ -46,48 +52,58 @@ export async function saveGenerationResult(requestId: string, data: any): Promis
     console.log(`[${requestId}] Saving result without documents array`);
   }
 
-  if (isNetlifyBlobsAvailable) {
-    // --- Save to Netlify Blobs ---
+  if (isNetlify) {
+    // --- In production: Use Netlify Blobs ---
     try {
-      const store = getStore('generationResults');
-      await store.setJSON(requestId, data);
-      console.log(`[${requestId}] Result saved to Netlify Blobs store 'generationResults'`);
-      console.log(`[${requestId}] Netlify Blob Result saved at ${new Date().toISOString()}`);
+      // Create a site-wide store using standard getStore method
+      const store = getStore(STORE_NAME);
+      
+      // Add timestamp to metadata
+      const metadata = {
+        timestamp: new Date().toISOString(),
+        contentType: 'application/json'
+      };
+      
+      // Store using setJSON with metadata
+      await store.setJSON(requestId, data, { metadata });
+      
+      console.log(`[${requestId}] Result saved to Netlify Blobs store '${STORE_NAME}'`);
+      console.log(`[${requestId}] Blob saved at ${metadata.timestamp}`);
       return true;
     } catch (error: any) {
       console.error(`[${requestId}] Error saving result to Netlify Blobs:`, error.message);
+      console.error(`[${requestId}] Stack trace:`, error.stack);
+      
+      // Log additional diagnostic information
+      if (error.code || error.statusCode) {
+        console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
+      }
+      
       return false;
     }
   } else {
-    // --- Save to Filesystem (Netlify /tmp or local ./tmp) ---
+    // --- In local development: Use filesystem ---
     const filePath = path.join(tmpDir, `${requestId}.json`);
-    console.log(`[${requestId}] Attempting to save result to filesystem path: ${filePath}`);
+    console.log(`[${requestId}] Local development: Saving to filesystem at ${filePath}`);
 
-    // Only attempt to create the directory if running locally
-    if (!isNetlify) {
-        const ensureTmpDir = async () => {
-          try {
-            await fs.mkdir(tmpDir, { recursive: true });
-            console.log(`[${requestId}] Ensured local tmp directory exists: ${tmpDir}`);
-          } catch (error) {
-            console.error(`[${requestId}] Failed to create local tmp directory:`, error);
-            throw new Error('Failed to create local tmp directory for fallback storage.');
-          }
-        };
-        try {
-            await ensureTmpDir(); // Ensure directory exists before writing locally
-        } catch(error: any) {
-            console.error(`[${requestId}] Error ensuring local tmp directory exists: ${error.message}`);
-            return false; // Stop if we can't create the local dir
-        }
-    } else {
-        // In Netlify, /tmp is assumed to exist
-        console.log(`[${requestId}] Running on Netlify, assuming ${tmpDir} exists.`);
+    // Ensure the tmp directory exists locally
+    try {
+      await fs.mkdir(tmpDir, { recursive: true });
+      console.log(`[${requestId}] Ensured local tmp directory exists: ${tmpDir}`);
+    } catch(error: any) {
+      console.error(`[${requestId}] Error ensuring local tmp directory exists:`, error.message);
+      return false;
     }
     
     // Write the file
     try {
-      await fs.writeFile(filePath, JSON.stringify(data));
+      // Add timestamp and environment info to data
+      data._meta = {
+        savedAt: new Date().toISOString(),
+        environment: 'local-development'
+      };
+      
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
       console.log(`[${requestId}] Result saved to local file system at: ${filePath}`);
       return true;
     } catch (error: any) {
