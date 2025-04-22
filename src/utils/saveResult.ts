@@ -60,11 +60,14 @@ interface DebugResponse {
 const STORE_NAME = 'generationResults';
 
 // Determine if running in a deployed Netlify environment
-const isNetlify = process.env.NETLIFY === 'true';
+// const isNetlify = process.env.NETLIFY === 'true'; // Old check
+// More robust check for Netlify Function environment
+const isNetlify = process.env.NETLIFY === 'true' || process.cwd().includes('/var/task');
+
 // Determine if running in Netlify Dev
 const isNetlifyDev = process.env.NETLIFY_DEV === 'true';
 
-console.log(`Environment detection: isNetlify=${isNetlify}, isNetlifyDev=${isNetlifyDev}, NETLIFY=${process.env.NETLIFY}, NETLIFY_DEV=${process.env.NETLIFY_DEV}, cwd=${process.cwd()}`);
+console.log(`[saveResult] Environment detection: isNetlify=${isNetlify}, isNetlifyDev=${isNetlifyDev}, NETLIFY=${process.env.NETLIFY}, NETLIFY_DEV=${process.env.NETLIFY_DEV}, cwd=${process.cwd()}`);
 
 // Determine the correct temporary directory path (only used for local dev/non-Netlify)
 const localTmpDir = path.join(process.cwd(), 'tmp');
