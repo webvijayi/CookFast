@@ -9,7 +9,7 @@
   
   # Directory containing serverless functions (API routes)
   # Netlify's Next.js runtime automatically detects functions in pages/api.
-  # functions = "netlify/functions" # Typically not needed for Next.js API routes
+  functions = "src/pages/api"
 
 [dev]
   # Optional: Settings for local development using Netlify Dev CLI
@@ -24,14 +24,15 @@
 # Configure paths for functions
 [functions]
   # Next.js API routes are stored in src/pages/api, but Netlify expects them in netlify/functions
-  directory = "src/pages/api"
   node_bundler = "esbuild"
-  # Note: Node.js version is set via environment variable in Netlify UI
+  included_files = ["src/pages/api/**/*"]
 
 # Configure generate-docs as a background function
-[functions."generate-docs"]
-  node_bundler = "esbuild"
+[functions.generate-docs]
   background = true
+  timeout = 900
+  memory = 1024
+  maxDuration = 900
 
 # Environment variables configuration
 [build.environment]
@@ -47,7 +48,6 @@
 
 # Fallback rules for OG images if Edge Function fails
 [[redirects]]
-  from = "/api/og-fallback"
-  to = "/cookfast-og-fallback.png"
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
   status = 200
-  force = true

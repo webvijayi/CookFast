@@ -73,6 +73,16 @@ interface GenerateDocsRequestBody {
   requestId?: string; // Include requestId
 }
 
+interface GenerationResult {
+  responseText: string;
+  modelUsed: string;
+  tokens: {
+    input: number;
+    output: number;
+    total: number;
+  };
+}
+
 // Constants - Use specified Gemini models
 const GEMINI_MODELS = {
   PRIMARY: "gemini-2.5-pro-exp-03-25", // Experimental model
@@ -696,7 +706,7 @@ async function generateWithAnthropic(
   }
 }
 
-// Main API Handler
+// Updated API Handler with proper background function handling
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -710,7 +720,7 @@ export default async function handler(
   console.log(`[${requestId}] Starting documentation generation request`);
   
   // Check if this is a background function request from Netlify
-  const isBackground = req.headers['x-netlify-background'] === 'true';
+  const isBackground = Boolean(req.headers['x-netlify-background']);
   console.log(`[${requestId}] Background Processing: ${isBackground}`);
 
   try {
@@ -731,305 +741,126 @@ export default async function handler(
       });
     }
 
-    // Convert selectedDocs object to array of keys where value is true
-    // Fix: Check that selectedDocs is properly structured 
-    if (typeof selectedDocs !== 'object') {
-      console.error(`[${requestId}] Invalid selectedDocs format: ${typeof selectedDocs}`);
-      return res.status(400).json({
-        status: 'failed',
-        error: 'Invalid selectedDocs format. Expected an object with boolean values.',
-        requestId
+    // For non-background requests, immediately return a 202 and trigger background processing
+    if (!isBackground) {
+      // Return 202 Accepted with request ID
+      res.status(202).json({
+        status: 'processing',
+        message: 'Document generation started',
+        requestId,
+        isBackgroundProcessing: true
       });
-    }
 
-    // Fix: Ensure proper parsing of selectedDocs object to extract document keys
-    const selectedDocKeys = Object.entries(selectedDocs)
-      .filter(([key, value]) => {
-        // Add debug logs for each key-value pair
-        console.log(`[${requestId}] Document selection: key=${key}, value=${value}, type=${typeof value}`);
-        return Boolean(value); // Convert any truthy value to true
-      })
-      .map(([key]) => key);
-
-    console.log(`[${requestId}] Processed selectedDocKeys:`, selectedDocKeys);
-
-    // Validate that at least one document is selected BEFORE building the prompt
-    if (selectedDocKeys.length === 0) {
-      console.error(`[${requestId}] No documents selected`);
-      // Return error immediately if no documents are selected
-      return res.status(400).json({
-        status: 'failed',
-        error: 'Please select at least one document type to generate',
-        requestId
-      });
-    }
-
-    // Log the document keys that were selected
-    console.log(`[${requestId}] Selected document types (${selectedDocKeys.length}): ${selectedDocKeys.join(', ')}`);
-
-    // Build the prompt from project details and selected documents
-    const prompt = buildPrompt(projectDetails, selectedDocs);
-    console.log(`[${requestId}] Built prompt for ${selectedDocKeys.length} document types`);
-    
-    // Add a debug log of the first 500 chars of the prompt
-    console.log(`[${requestId}] Prompt preview (first 500 chars): ${prompt.substring(0, 500)}...`);
-
-    // Process response based on provider
-    let result: { responseText: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
-    try {
-      console.log(`[${requestId}] Starting generation with ${provider} provider`);
-
-    switch (provider.toLowerCase()) {
-        case 'gemini':
-          // Try the primary model first, fall back to alternative if needed
-          try {
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, isBackground);
-          } catch (error: any) {
-            console.log(`[${requestId}] Primary Gemini model failed, trying fallback: ${error.message}`);
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, isBackground);
-          }
-          break;
-      case 'openai':
-          result = await generateWithOpenAI(apiKey, prompt, requestId, isBackground);
-        break;
-      case 'anthropic':
-          result = await generateWithAnthropic(apiKey, prompt, requestId, isBackground);
-        break;
-      default:
-          return res.status(400).json({ 
-            status: 'failed',
-            error: `Invalid provider: ${provider}. Supported providers are: gemini, openai, anthropic`,
-            requestId
-          });
-      }
-    } catch (generationError: any) {
-      console.error(`[${requestId}] Generation error with ${provider}:`, generationError.message);
-      
-      // If in background mode, store the error and return success with the requestId
-      if (isBackground) {
-        const errorData: ApiResponseType = {
-          status: 'failed',
-          message: 'Document generation failed',
-          error: generationError.message || 'Unknown error during generation',
-          requestId,
-          debug: {
-            provider,
-            timestamp: new Date().toISOString(),
-            error: generationError.message
-          }
-        };
-        
-        await saveGenerationResult(requestId, errorData);
-        return res.status(202).json({ 
-          message: 'Generation task started in background, but encountered an error',
-          requestId, 
-          isBackgroundProcessing: true 
-        });
-      }
-      
-      // If not background, return the error directly
-      return res.status(500).json({ 
-        status: 'failed',
-        error: generationError.message || 'Unknown error during generation',
-        requestId
-      });
-    }
-    
-    // Process the raw response text into structured data
-    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}): ${result.responseText.substring(0, 200)}...`);
-    
-    // Add detailed logging of the ENTIRE raw response for debugging
-    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}):`, result.responseText);
-    
-    try {
-      // First check if the response is valid JSON
-      if (!result.responseText || result.responseText.trim() === '') {
-        throw new Error('Empty response received from AI provider');
-      }
-      
-      // Try to parse the JSON response from the AI
-      let parsedResponse: StructuredGenerationResponse;
+      // Trigger background processing by making a new request
       try {
-        parsedResponse = JSON.parse(result.responseText);
-      } catch (jsonError: any) {
-        console.error(`[${requestId}] Failed to parse AI response: ${jsonError.message}`);
-        // Try to clean up the response if it might be wrapped in markdown code blocks
-        const cleanedResponse = result.responseText.replace(/^```json\s*([\s\S]*?)\s*```$/g, '$1').trim();
-        try {
-          parsedResponse = JSON.parse(cleanedResponse);
-          console.log(`[${requestId}] Successfully parsed JSON after cleaning markdown code blocks`);
-        } catch (secondError) {
-          // If still failing, rethrow the original error
-          throw jsonError;
-        }
-      }
-      
-      // Check if the response is empty or has no keys
-      if (!parsedResponse || Object.keys(parsedResponse).length === 0) {
-        console.error(`[${requestId}] AI provider returned empty JSON object: ${result.responseText}`);
-        
-        // Extract the requested document titles from the prompt for fallback
-        const requestedDocTitlesRegex = /<final_instruction>[\s\S]*?these (\d+) document types:[\s\S]*?((?:- "[^"]+"\n)+)/i;
-        const promptMatch = prompt.match(requestedDocTitlesRegex);
-        const requestedTitles: string[] = [];
-        
-        if (promptMatch && promptMatch[2]) {
-          // Extract titles from the matched section in the prompt
-          const titleLines = promptMatch[2].split('\n');
-          titleLines.forEach(line => {
-            const titleMatch = line.match(/- "([^"]+)"/);
-            if (titleMatch && titleMatch[1]) {
-              requestedTitles.push(titleMatch[1]);
-            }
-          });
-          console.log(`[${requestId}] Extracted ${requestedTitles.length} document titles from prompt for fallback`);
-        }
-        
-        // Create a fallback document with error information and minimal template documents
-        const fallbackContent = `# Generation Failed - Empty Response
-        
-## What Happened
-The AI provider (${provider.toUpperCase()}) returned an empty response. This could be due to:
-- Rate limiting
-- Token limits exceeded
-- Content filtering triggered
-- API connectivity issues
-
-## How to Fix
-1. Please try again with a different AI provider
-2. Simplify your project details and reduce the number of document types
-3. Check your API key and ensure it has proper permissions
-4. If using OpenAI or Anthropic, check your account usage and quotas
-
-## Technical Details
-- Provider: ${provider}
-- Model: ${result.modelUsed}
-- Timestamp: ${new Date().toISOString()}
-- Response Length: ${result.responseText.length} characters
-- Response Content: \`${result.responseText}\`
-`;
-
-        const fallbackDocuments = [{
-          title: "Error Report",
-          content: fallbackContent
-        }];
-        
-        // Add fallback documents for each requested document type
-        if (requestedTitles.length > 0) {
-          requestedTitles.forEach(title => {
-            fallbackDocuments.push({
-              title,
-              content: `# ${title}\n\n## Overview\n\nThis is a minimal placeholder document. The AI provider returned an empty response, but this document type was requested.\n\n## Basic Outline\n\n- Section 1\n- Section 2\n- Section 3`
-            });
-          });
-          console.log(`[${requestId}] Added ${requestedTitles.length} minimal fallback documents`);
-        }
-        
-        // Create response with fallback documents and error flag
-        const errorData: ApiResponseType = {
-          status: 'completed', // Mark as completed, but with error flag
-          message: 'AI provider returned empty response. Fallback content generated.',
-          documents: fallbackDocuments,
-          requestId,
-          debug: {
-            provider,
-            model: result.modelUsed,
-            timestamp: new Date().toISOString(),
-            processingTimeMs: Date.now() - new Date().getTime(),
-            contentLength: result.responseText.length,
-            tokensUsed: result.tokens,
-            error: 'Empty response from AI provider',
-            originalResponse: result.responseText
-          }
-        };
-        
-        if (isBackground) {
-          await saveGenerationResult(requestId, errorData);
-          return res.status(202).json({ 
-            message: 'Document generation task started, but AI returned empty response. Fallback content created.',
-            requestId,
-            isBackgroundProcessing: true
-          });
-        }
-        
-        return res.status(200).json(errorData);
-      }
-      
-      // Convert the response to documents array format expected by the client
-      const documents = Object.entries(parsedResponse).map(([title, content]) => ({
-        title,
-        content: typeof content === 'string' ? content : JSON.stringify(content)
-      }));
-      
-      if (documents.length === 0) {
-        throw new Error('No documents were generated from non-empty response');
-      }
-      
-      // Create final response with debug info
-      const responseData: ApiResponseType = {
-        status: 'completed',
-        message: 'Documents generated successfully',
-        documents,
-        requestId,
-        debug: {
-          provider,
-          model: result.modelUsed,
-          timestamp: new Date().toISOString(),
-          processingTimeMs: Date.now() - new Date().getTime(),
-          contentLength: result.responseText.length,
-          tokensUsed: result.tokens
-        }
-      };
-      
-      // If this is a background process, store the result and return a simple response
-      if (isBackground) {
-        await saveGenerationResult(requestId, responseData);
-        return res.status(202).json({ 
-          message: 'Document generation task started',
-          requestId,
-          isBackgroundProcessing: true
+        const response = await fetch(`${process.env.URL}/.netlify/functions/generate-docs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-netlify-background': 'true',
+            'x-request-id': requestId
+          },
+          body: JSON.stringify(body)
         });
-      }
-      
-      // Otherwise return the full result
-      return res.status(200).json(responseData);
-      
-    } catch (parseError: any) {
-      console.error(`[${requestId}] Failed to parse AI response:`, parseError.message);
-      
-      // Create error response
-      const errorData: ApiResponseType = {
-        status: 'failed',
-        message: 'Failed to parse generated documentation',
-        error: parseError.message || 'Invalid JSON response from AI provider',
-        requestId,
-        debug: {
-          provider,
-          model: result.modelUsed,
-          timestamp: new Date().toISOString(),
-          rawResponsePreview: result.responseText.substring(0, 500) + (result.responseText.length > 500 ? '...' : '')
+
+        if (!response.ok) {
+          console.error(`[${requestId}] Failed to trigger background processing:`, response.status);
+          // Don't throw here since we already sent the response
         }
-      };
-      
-      // If in background mode, store the error and return success with the requestId
-      if (isBackground) {
-        await saveGenerationResult(requestId, errorData);
-        return res.status(202).json({ 
-          message: 'Generation task started in background, but encountered a parsing error',
-          requestId,
-          isBackgroundProcessing: true
-        });
+      } catch (error) {
+        console.error(`[${requestId}] Error triggering background processing:`, error);
+        // Don't throw here since we already sent the response
       }
-      
-      // If not background, return the error directly
-      return res.status(500).json(errorData);
+
+      return;
     }
-    
+
+    // Background processing logic
+    console.log(`[${requestId}] Starting background processing`);
+
+    // Build the prompt
+    const prompt = buildPrompt(projectDetails, selectedDocs);
+    console.log(`[${requestId}] Built prompt for ${Object.keys(selectedDocs).filter(k => selectedDocs[k as keyof DocumentSelection]).length} document types`);
+
+    // Generate content based on provider
+    let result: GenerationResult;
+    try {
+      switch (provider) {
+        case 'openai':
+          result = await generateWithOpenAI(apiKey, prompt, requestId, true);
+          break;
+        case 'anthropic':
+          result = await generateWithAnthropic(apiKey, prompt, requestId, true);
+          break;
+        case 'gemini':
+          result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, true);
+          break;
+        default:
+          throw new Error(`Unsupported provider: ${provider}`);
+      }
+    } catch (error: any) {
+      console.error(`[${requestId}] Generation error:`, error);
+      throw error;
+    }
+
+    // Parse and validate the response
+    let parsedResponse: StructuredGenerationResponse;
+    try {
+      parsedResponse = JSON.parse(result.responseText);
+    } catch (error) {
+      console.error(`[${requestId}] Failed to parse AI response as JSON:`, error);
+      throw new Error('Invalid JSON response from AI provider');
+    }
+
+    // Convert to documents array
+    const documents = Object.entries(parsedResponse).map(([title, content]) => ({
+      title,
+      content: typeof content === 'string' ? content : JSON.stringify(content)
+    }));
+
+    // Store the result for later retrieval
+    const responseData: ApiResponseType = {
+      status: 'completed',
+      message: 'Documents generated successfully',
+      documents,
+      requestId,
+      debug: {
+        provider,
+        model: result.modelUsed,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - new Date().getTime(),
+        contentLength: result.responseText.length,
+        tokensUsed: result.tokens
+      }
+    };
+
+    await saveGenerationResult(requestId, responseData);
+
+    // Return success for background processing
+    return res.status(200).json({
+      status: 'completed',
+      message: 'Background processing completed successfully',
+      requestId
+    });
+
   } catch (error: any) {
-    console.error(`[${requestId}] Unhandled error in generate-docs API:`, error);
-    return res.status(500).json({ 
+    console.error(`[${requestId}] Error:`, error);
+    
+    // Store error result
+    const errorResponse: ApiResponseType = {
       status: 'failed',
-      error: error.message || 'An unexpected error occurred',
+      message: error.message || 'An unknown error occurred',
+      error: error.stack || error.message || String(error),
+      requestId,
+      documents: []
+    };
+
+    await saveGenerationResult(requestId, errorResponse);
+
+    // Return error status for background processing
+    return res.status(500).json({
+      status: 'failed',
+      message: error.message || 'An unknown error occurred',
       requestId
     });
   }
