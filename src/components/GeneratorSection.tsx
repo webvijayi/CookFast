@@ -170,6 +170,9 @@ export default function GeneratorSection() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Add runInBackground state
+  const [runInBackground, setRunInBackground] = useState(false);
+  
   // Add debug logs
   const addDebugLog = (event: string, details: unknown = {}) => {
     const timestamp = new Date().toISOString();
@@ -226,19 +229,23 @@ export default function GeneratorSection() {
     projectDetails: ProjectDetails,
     selectedDocs: DocumentSelection,
     provider: AIProvider,
-    apiKey: string
+    apiKey: string,
+    runInBackgroundFlag: boolean // This parameter will be ignored
   ) => {
     // --- Reset Section ---
-    setGeneratedDocs(null); // Clear previous results
-    setError(null); // Clear previous errors
+    setGeneratedDocs(null);
+    setError(null);
     setIsLoading(true);
     setGenerationStage('Preparing to generate documents');
-    addDebugLog('Form Submit: Start', { provider, numDocs: Object.values(selectedDocs).filter(Boolean).length });
+    // Force background processing to always be true
+    const useBackgroundProcessing = true;
+    setRunInBackground(useBackgroundProcessing);
+    addDebugLog('Form Submit: Start', { provider, numDocs: Object.values(selectedDocs).filter(Boolean).length, background: useBackgroundProcessing });
 
     // --- Abort Previous (if any) ---
-    handleStopGeneration(); // Stop any previous ongoing process
+    handleStopGeneration();
 
-    // --- Setup Abort Controller for Initial Request ---
+    // --- Setup Abort Controller ---
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -270,25 +277,31 @@ export default function GeneratorSection() {
         return;
     }
 
-    addDebugLog('Form Submit: Data Prepared', { details: sanitizedProjectDetails, docs: selectedDocKeys });
+    addDebugLog('Form Submit: Data Prepared', { details: sanitizedProjectDetails, docs: selectedDocKeys, background: useBackgroundProcessing });
 
-    // --- API Call (Initial Background Request) ---
+    // --- API Call ---
     try {
       setGenerationStage('Initiating generation task...');
-      addDebugLog('Form Submit: Sending initial request', { endpoint: '/api/generate-docs' });
+      addDebugLog('Form Submit: Sending initial request', { endpoint: '/api/generate-docs', background: useBackgroundProcessing });
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+
+      // Always add the background header
+      headers['X-Netlify-Background'] = 'true';
+      addDebugLog('Form Submit: Adding X-Netlify-Background header');
 
       const response = await fetch('/api/generate-docs', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           projectDetails: sanitizedProjectDetails,
           selectedDocs: selectedDocKeys,
           provider,
           apiKey,
         }),
-        signal: controller.signal, // Pass the abort signal
+        signal: controller.signal,
       });
 
       addDebugLog('Form Submit: Initial response received', { status: response.status });
@@ -368,7 +381,10 @@ export default function GeneratorSection() {
          addDebugLog('Polling: Check Status Failed', { requestId, status: response.status });
          // Don't throw an error yet, allow polling to continue unless it's a fatal error like 404
          if (response.status === 404) {
-            throw new Error('Generation task not found.');
+            setError('Generation task not found. Please try again.');
+            setIsLoading(false);
+            handleStopGeneration();
+            return;
          }
          return; // Continue polling on transient errors
       }
@@ -380,8 +396,21 @@ export default function GeneratorSection() {
         handleStopGeneration(); // Stop polling on completion
         handleSuccessfulResponse(data.result);
       } else if (data.status === 'failed') {
+        // Handle failure gracefully without throwing an error
         handleStopGeneration(); // Stop polling on failure
-        throw new Error(data.error || 'Generation task failed.');
+        
+        // Set error message from API response or a default message
+        const errorMessage = data.error || 'Generation task failed.';
+        addDebugLog('Polling: Failed Status', { requestId, error: errorMessage, details: data });
+        
+        setError(`Document generation failed: ${errorMessage}`);
+        setGenerationStage('Error: Generation failed');
+        setIsLoading(false);
+        
+        // If we have some debug info, log it for troubleshooting
+        if (data.debug) {
+          console.error('Generation failed with debug info:', data.debug);
+        }
       } else if (data.status === 'processing') {
         // Update progress if available
         const progress = data.progress || 'Task is processing';
@@ -399,7 +428,7 @@ export default function GeneratorSection() {
       setGenerationStage('Error checking status');
       addDebugLog('Polling: Error', { requestId, error: error.message });
       handleStopGeneration(); // Stop polling on error
-            setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -425,6 +454,7 @@ export default function GeneratorSection() {
       }
   };
 
+  // Updated handleSuccessfulResponse to validate data.documents array (YYYY-MM-DD)
   const handleSuccessfulResponse = (data: any) => {
     addDebugLog('Response Handler: Success', { data });
     if (!data) {
@@ -435,57 +465,66 @@ export default function GeneratorSection() {
       addDebugLog('Response Handler: Error - Empty data object');
       return; // Exit early
     }
-    
-    // Validate that we have *some* content data, less strictly
-    // Check if content is a non-empty string OR if sections is a non-empty array
-    const hasSomeContent = (data.content && typeof data.content === 'string' && data.content.trim().length > 0) || 
-                         (Array.isArray(data.sections) && data.sections.length > 0);
 
-    
-    if (!hasSomeContent) {
-      addDebugLog('API response validation failed (Relaxed Check)', { 
-        contentPresent: !!data.content,
-        contentType: typeof data.content,
-        contentLength: data.content?.length || 0,
-        sectionsPresent: Array.isArray(data.sections),
-        sectionsCount: data.sections?.length || 0
+    // --- MODIFIED VALIDATION ---
+    // Validate that we have a non-empty documents array
+    const hasDocuments = Array.isArray(data.documents) && data.documents.length > 0;
+
+    if (!hasDocuments) {
+      addDebugLog('API response validation failed: Documents array missing or empty', {
+        documentsPresent: Array.isArray(data.documents),
+        documentsCount: Array.isArray(data.documents) ? data.documents.length : 'N/A',
+        responseData: data // Log the full response for context
       });
-      
+
       // Updated error message for clarity
       setError('Generated content was empty or missing. Please try regenerating, perhaps with different settings.');
       setGenerationStage('Error: Generated content appears empty');
       setIsLoading(false);
       return; // Exit early
     }
+
+    // --- END MODIFIED VALIDATION ---
+
+    // Ensure documents is always an array (already validated above, but good practice)
+    const documents = Array.isArray(data.documents) ? data.documents : [];
     
-    // Ensure sections is always an array, even if empty or missing initially
-    const sections = Array.isArray(data.sections) ? data.sections : [];
-    // Ensure content is a string, default to empty if missing or wrong type
-    const content = (data.content && typeof data.content === 'string') ? data.content : '';
+    // Sanitize each document within the array
+    const sanitizedDocuments = documents.map((doc: any) => ({
+      title: typeof doc.title === 'string' ? doc.title : "Untitled Document",
+      content: typeof doc.content === 'string' ? doc.content : ""
+    }));
 
     // Prepare the data structure expected by the rest of the app
+    // We now primarily rely on the 'documents' array
     const structuredData = {
        ...data, // Keep original debug info etc.
-       content: content, // Use sanitized content
-       sections: sections // Use sanitized sections
+       documents: sanitizedDocuments // Use sanitized documents array
+       // Remove potentially confusing/legacy content/sections fields if they exist in data
+       // content: undefined, 
+       // sections: undefined 
     };
+    
+    // Clean up the object before passing it on
+    delete structuredData.content;
+    delete structuredData.sections;
 
-    // Store the structured generated docs
-    setGeneratedDocs(structuredData);
+
+    // Store the structured generated docs (using the correct format)
+    setGeneratedDocs(structuredData); // Assuming setGeneratedDocs expects this structure
     setGenerationStage('Generation complete!');
     setIsLoading(false);
-    
+
     // Dispatch the generation success event with the structured data
     const successEvent = new CustomEvent('cookfast:generationSuccess', {
-      detail: structuredData // Pass the cleaned-up data
+      detail: structuredData // Pass the cleaned-up data containing the documents array
     });
-    
+
     // Add debug log for the event dispatch
-    addDebugLog('Dispatching generationSuccess event (Relaxed Validation)', {
-      sectionsCount: structuredData.sections?.length || 0,
-      contentLength: structuredData.content?.length || 0,
+    addDebugLog('Dispatching generationSuccess event', {
+      documentsCount: structuredData.documents?.length || 0,
     });
-    
+
     // Dispatch the event to notify the main component
     document.dispatchEvent(successEvent);
   };
@@ -557,7 +596,7 @@ export default function GeneratorSection() {
 
   // --- JSX Rendering --- //
   return (
-    <section id="generator" className="py-16 md:py-24 bg-muted/40 dark:bg-muted/10">
+    <section id="generate" className="py-16 md:py-24 bg-muted/40 dark:bg-muted/10">
       <div className="container max-w-6xl mx-auto px-4">
         <Card className="shadow-lg overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6">

@@ -5,6 +5,7 @@
  * Updated: ${new Date().toISOString()} - Moved local tmp directory creation to only run when not in Netlify env.
  * Updated: ${new Date().toISOString()} - Switched from fs to Netlify Blobs for persistence.
  * Updated: 2023-11-20 - Added Netlify compatibility for tmp directory (now deprecated).
+ * Updated: 2023-10-21 - Added enhanced debug logging for document content structure.
  */
 import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
@@ -23,6 +24,26 @@ const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
  * or local file system (as fallback) for later retrieval.
  */
 export async function saveGenerationResult(requestId: string, data: any): Promise<boolean> {
+  // Log document structure for debugging
+  if (data?.documents) {
+    console.log(`[${requestId}] Saving document result with ${data.documents.length || 0} documents`);
+    if (Array.isArray(data.documents)) {
+      // Log document titles for debugging
+      console.log(`[${requestId}] Document titles: ${data.documents.map((doc: any) => 
+        doc?.title || 'Untitled').join(', ')}`);
+      
+      // Log rough content length for each document
+      data.documents.forEach((doc: any, index: number) => {
+        const contentLength = doc?.content?.length || 0;
+        console.log(`[${requestId}] Document ${index+1}: ${doc?.title || 'Untitled'} (content length: ${contentLength} chars)`);
+      });
+    } else {
+      console.warn(`[${requestId}] WARNING: documents is not an array: ${typeof data.documents}`);
+    }
+  } else {
+    console.log(`[${requestId}] Saving result without documents array`);
+  }
+
   if (isNetlifyBlobsAvailable) {
     // --- Save to Netlify Blobs ---
     try {

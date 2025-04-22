@@ -145,6 +145,51 @@ export default async function handler(
         console.warn(`[${requestId}] Failed - Error: ${document.error}`);
       }
       
+      // Check if we need to validate document structure before returning
+      if (finalStatus === 'completed' && document && document.documents) {
+        // Check if documents array exists and has valid structure
+        if (!Array.isArray(document.documents) || document.documents.length === 0) {
+          console.warn(`[${requestId}] Document has 'completed' status but documents array is empty or not an array`);
+          // Keep the status as completed but add warning in message
+          return res.status(200).json({
+            status: 'completed',
+            message: 'Document generation completed but no valid documents were found in the result.',
+            result: document,
+            error: 'No documents were generated',
+            tokensUsed: tokenInfo,
+            processingTimeMs: document?.debug?.processingTimeMs || 0,
+            timestamp: document?.debug?.timestamp || document.timestamp || new Date().toISOString(),
+            requestId,
+            debug: document.debug
+          });
+        }
+        
+        // Ensure all documents have title and content properties
+        const validDocuments = document.documents.filter((doc: any) => 
+          doc && typeof doc === 'object' && doc.title && doc.content
+        );
+        
+        if (validDocuments.length === 0) {
+          console.warn(`[${requestId}] Document has 'completed' status but no valid documents with title/content were found`);
+          return res.status(200).json({
+            status: 'completed',
+            message: 'Document generation completed but documents are missing required fields.',
+            result: document,
+            error: 'Generated documents are malformed',
+            tokensUsed: tokenInfo,
+            processingTimeMs: document?.debug?.processingTimeMs || 0,
+            timestamp: document?.debug?.timestamp || document.timestamp || new Date().toISOString(),
+            requestId,
+            debug: document.debug
+          });
+        }
+        
+        // If we found fewer valid documents than the total, log a warning
+        if (validDocuments.length < document.documents.length) {
+          console.warn(`[${requestId}] Some documents were filtered out due to missing fields: ${document.documents.length - validDocuments.length} invalid out of ${document.documents.length} total`);
+        }
+      }
+      
       // Return the completed/failed results with proper headers for caching
       res.setHeader('Cache-Control', 'private, max-age=60');
       return res.status(200).json({

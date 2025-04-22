@@ -7,12 +7,22 @@
 // Timestamp: 2023-11-20T00:00:00.000Z - Fixed compatibility with Netlify background functions
 // Timestamp: 2023-11-21T00:00:00.000Z - Fixed 502 error by correctly implementing background function pattern
 // Timestamp: ${new Date().toISOString()} - Updated OpenAI model to gpt-4.1 and increased token limit
+// Timestamp: 2025-04-21T06:40:00Z - Refined markdown section parser for better robustness.
+// Timestamp: 2025-04-22T10:15:00Z - Updated buildPrompt to request structured JSON output.
+// Timestamp: 2025-04-22T10:25:00Z - Added instruction for JSON output to buildPrompt.
+// Timestamp: 2025-04-22T10:30:00Z - Updated API handler to parse JSON response and return documents array.
+// Timestamp: 2025-04-22T10:40:00Z - Fixed lint errors: removed unused getStore, added missing fields to error responses.
+// Timestamp: 2025-04-22T10:45:00Z - Corrected remaining lint error by adding status field.
+// Timestamp: 2025-04-22T10:50:00Z - Corrected lint error in 400 response.
+// Timestamp: 2025-04-22T11:20:00Z - Fixed 405 response lint error.
+// Timestamp: YYYY-MM-DD - Added logging for raw AI response before parsing
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerateContentCandidate, GenerateContentResponse } from '@google/generative-ai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { withRetry } from '@/utils/index';
 import { saveGenerationResult } from '@/utils/saveResult';
+import { nanoid } from 'nanoid';
 
 // For environments that have issues with the native fetch implementation
 import fetch from 'cross-fetch';
@@ -79,7 +89,7 @@ const safetySettings = [
 // Token limits per provider
 const TOKEN_LIMITS = {
   gemini: 65536, // Common output limit for 2.5 Pro variants
-  openai: 32768, // Updated limit for GPT-4.1 max output tokens
+  openai: 16384, // Corrected limit for GPT-4.1 max output tokens (was 32768)
   anthropic: 64000
 };
 
@@ -117,54 +127,79 @@ const TOKEN_LIMITS = {
 
 // Improved parsing function
 function parseContentToSections(content: string): DocumentSection[] {
+  if (!content || content.trim() === '') {
+    console.log('Parsing empty content, returning empty sections array.');
+    return [];
+  }
+
   const sections: DocumentSection[] = [];
-  // Use a more robust regex to handle potential variations in markdown headings
-  const sectionRegex = /^#{1,3}\s+(.+?)\s*?\n([\s\S]*?)(?=\n#{1,3}\s+|$)/gm;
-  let match;
-
+  // Regex to find H1, H2, or H3 headings
+  const sectionRegex = /^#{1,3}\s+(.+?)\s*?\n/gm;
   let lastIndex = 0;
-  while ((match = sectionRegex.exec(content)) !== null) {
-    // Capture content before the first heading as Introduction
-    if (sections.length === 0 && match.index > 0) {
-      sections.push({
-        title: 'Introduction',
-        content: content.substring(0, match.index).trim()
-      });
+  let firstHeadingIndex = -1;
+
+  // Find the index of the first heading
+  const firstMatch = sectionRegex.exec(content);
+  if (firstMatch) {
+    firstHeadingIndex = firstMatch.index;
+    // If there is content before the first heading, capture it as Introduction
+    if (firstHeadingIndex > 0) {
+      const introContent = content.substring(0, firstHeadingIndex).trim();
+      if (introContent) {
+        console.log(`Found Introduction content (length: ${introContent.length})`);
+        sections.push({ title: 'Introduction', content: introContent });
+      }
     }
-    sections.push({
-      title: match[1].trim(),
-      content: match[2].trim()
-    });
-    lastIndex = sectionRegex.lastIndex;
+  } else {
+    // No headings found, treat the entire content as one section
+    console.log('No headings found, treating entire content as single section.');
+    return [{ title: 'Documentation', content: content.trim() }];
   }
 
-  // If no sections were found, treat the whole content as one section
-  if (sections.length === 0 && content.trim().length > 0) {
-    sections.push({
-      title: 'Documentation',
-      content: content.trim()
-    });
-  } else if (lastIndex < content.length) {
-     // Capture any trailing content after the last heading
-     const trailingContent = content.substring(lastIndex).trim();
-     if (trailingContent) {
-       if (sections.length > 0) {
-         // Append to the last section if it exists
-         sections[sections.length - 1].content += `\\n\\n${trailingContent}`;
-       } else {
-         // Or create an Introduction section if no sections were parsed
-         sections.push({ title: 'Introduction', content: trailingContent });
-       }
-     }
+  // Reset regex index for iteration
+  sectionRegex.lastIndex = 0;
+  let match;
+  let startIndex = firstHeadingIndex; // Start parsing from the first heading
+
+  while ((match = sectionRegex.exec(content)) !== null) {
+    const title = match[1].trim();
+    const currentHeadingIndex = match.index;
+
+    // Add content from the previous heading (or start) to the current heading
+    if (startIndex !== -1) {
+      const sectionContent = content.substring(startIndex + match[0].length, currentHeadingIndex).trim();
+      if (sections.length > 0 && sectionContent) {
+         // Add content to the previously added section title
+         sections[sections.length - 1].content = sectionContent;
+         console.log(`Added content (length: ${sectionContent.length}) to section: ${sections[sections.length - 1].title}`);
+      }
+    }
+
+    // Add the new section title (content will be added in the next iteration or after the loop)
+    console.log(`Found section title: ${title}`);
+    sections.push({ title: title, content: '' }); // Initialize content as empty
+
+    startIndex = currentHeadingIndex;
+    lastIndex = sectionRegex.lastIndex; // Keep track of the end of the last match
   }
 
+  // Add content after the last heading
+  if (startIndex !== -1 && sections.length > 0) {
+    const lastSectionContent = content.substring(lastIndex).trim();
+    if (lastSectionContent) {
+      sections[sections.length - 1].content = lastSectionContent;
+      console.log(`Added final content (length: ${lastSectionContent.length}) to section: ${sections[sections.length - 1].title}`);
+    }
+  }
 
-  // Filter out empty sections potentially created during parsing
-  return sections.filter(section => section.title.trim() !== '' || section.content.trim() !== '');
+  // Filter out sections that might have ended up with empty titles or content
+  const filteredSections = sections.filter(section => section.title.trim() !== '' || section.content.trim() !== '');
+  console.log(`Parsing complete. Found ${filteredSections.length} valid sections.`);
+  return filteredSections;
 }
 
 
-// Updated prompt building function
+// Updated buildPrompt function with consolidated JSON instructions
 function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): string {
   const {
     projectName,
@@ -181,133 +216,124 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
     projectDescription
   } = details;
 
-  let prompt = `## Project Context\\\\n\\\\n` +
-               `**Project Name:** ${projectName || 'Not Specified'}\\\\n` +
-               `**Project Type:** ${projectType || 'Not Specified'}\\\\n` +
-               `**Core Goal/Objective:** ${projectGoal || 'Not Specified'}\\\\n` +
-               `${projectDescription ? `**Detailed Description:** ${projectDescription}\\\\n` : ''}` +
-               `**Target Audience:** ${targetAudience || 'Not Specified'}\\\\n` +
-               `**User Personas:** ${userPersonas || 'Not Specified'}\\\\n` +
-               `**Key Features:**\\\\n${features ? features.split(/[\\n,]+/).map(f => `- ${f.trim()}`).join('\\\\n') : '- Not Specified'}\\\\n` +
-               `**Technology Stack:** ${techStack || 'Not Specified'}\\\\n` +
-               `${hasFrontend !== undefined ? `**Includes Frontend:** ${hasFrontend ? 'Yes' : 'No'}\\\\n` : ''}` +
-               `${hasBackend !== undefined ? `**Includes Backend:** ${hasBackend ? 'Yes' : 'No'}\\\\n` : ''}` +
-               `**Key Challenges/Risks:** ${keyChallenges || 'Not Specified'}\\\\n` +
-               `**Success Metrics:** ${successMetrics || 'Not Specified'}\\\\n\\\\n` +
-               `## Documentation Task\\\\n\\\\n` +
-               `Based *strictly* on the **Project Context** provided above, generate the following technical documentation sections. ` +
-               `Use detailed markdown formatting (headings, subheadings, lists, code blocks \\\`\\\`\\\`language...\\\`\\\`\\\`, emphasis). ` +
-               `Be highly specific and avoid generic statements or placeholders. Assume standard best practices where details are missing but align with the provided stack and project type. ` +
-               `Do NOT invent features, technologies, or requirements not implied by the context.\\\\n\\\\n` +
-               `### Selected Documentation Sections:\\\\n\\\\n`;
-
-  let sectionCount = 1;
-
-  const addSection = (title: string, details: string[]) => {
-    prompt += `${sectionCount}. **${title}**\\\\n`;
-    details.forEach(detail => prompt += `   - ${detail}\\\\n`);
-    prompt += `   *Instructions:* Provide thorough, specific details based *only* on the project information given above. Structure clearly using relevant subheadings (##, ###) within this section. Provide concrete examples where applicable (e.g., code snippets, API endpoints, user stories).\\\\n\\\\n`;
-    sectionCount++;
+  // Map internal keys to the exact titles expected in the JSON output
+  const requestedDocTitlesMap: { [key in keyof DocumentSelection]?: string } = {
+    requirements: 'Requirements Document (PRD/BRD)',
+    frontendGuidelines: 'Frontend Guidelines & Architecture',
+    backendStructure: 'Backend Architecture & Design',
+    appFlow: 'Application Flow',
+    techStackDoc: 'Technology Stack Details',
+    systemPrompts: 'AI System Prompts (Examples)',
+    fileStructure: 'Recommended Project Structure',
   };
 
-  if (selectedDocs.requirements) {
-    addSection('Requirements Document (PRD/BRD)', [
-      'Detailed functional requirements derived directly from the Key Features list.',
-      'Specific non-functional requirements (e.g., performance expectations based on project type, security needs, scalability considerations).',
-      'User stories for 3-5 core features (Format: "As a [persona from User Personas/Target Audience], I want [feature] so that [benefit derived from Core Goal]").',
-      'Acceptance criteria for 2 key user stories (specific, measurable conditions for completion).',
-      'Identify technical constraints or dependencies implied by the Technology Stack.',
-      'Define explicit scope boundaries (what is NOT included, based on features and goal).',
-      'Prioritize features (e.g., Must-Have, Should-Have) based on the Core Goal.'
-    ]);
-  }
+  const requestedDocTitles = Object.entries(selectedDocs)
+    .filter(([key, isSelected]) => isSelected && requestedDocTitlesMap[key as keyof DocumentSelection])
+    .map(([key]) => requestedDocTitlesMap[key as keyof DocumentSelection]!);
 
-  if (selectedDocs.frontendGuidelines && (hasFrontend === undefined || hasFrontend === true)) {
-    addSection('Frontend Guidelines', [
-      'Suggest a component architecture/structure (e.g., Atomic Design, feature folders) suitable for the Technology Stack (e.g., React, Angular, Vue).',
-      'Recommend a state management approach (e.g., Context API, Redux, Zustand, Pinia) based on the Technology Stack and project complexity.',
-      'Propose styling conventions (e.g., Tailwind CSS, CSS Modules, Styled Components) aligning with the Technology Stack.',
-      'Define standard responsive design breakpoints (e.g., sm, md, lg, xl).',
-      'Provide a code example of a reusable UI component pattern (e.g., a Button or Card) using the proposed stack and styling.',
-      'Outline a routing strategy (e.g., Next.js App Router, React Router DOM, Vue Router).',
-      'List key accessibility considerations (target WCAG AA compliance).',
-      'Describe a standard approach for handling forms and input validation.',
-      'Define patterns for displaying loading states and handling/displaying errors.'
-    ]);
-  }
+  // Check if we have valid project details - if not, provide default placeholders
+  // but ensure we explicitly tell the AI this is a placeholder
+  const safeProjectName = projectName?.trim() || 'UNTITLED PROJECT';
+  const safeProjectType = projectType?.trim() || 'Generic Project';
+  
+  // Explicitly instruct the AI not to improvise details
+  const noDetailsWarning = (!projectName?.trim() && !projectGoal?.trim() && !features?.trim() && !techStack?.trim()) 
+    ? `\n\n**IMPORTANT: The user has not provided specific project details. DO NOT invent a fictitious company, website, or application. Generate generic documentation for a ${safeProjectType} without filling in details that weren't provided.**\n\n`
+    : '';
 
-  if (selectedDocs.backendStructure && (hasBackend === undefined || hasBackend === true)) {
-    addSection('Backend Architecture', [
-      'Propose an API design style (e.g., RESTful, GraphQL) suitable for the Project Type and Technology Stack.',
-      'Include an example API endpoint definition (e.g., `POST /api/users` with request/response body structure).',
-      'Outline a potential database schema (suggest key tables/collections and relationships based on features and project type).',
-      'Recommend an authentication/authorization strategy (e.g., JWT, OAuth 2.0, session cookies) relevant to the Project Type.',
-      'List essential security measures (input validation, output encoding, rate limiting, secure secrets management).',
-      'Define a logging strategy (levels: info, warn, error; format; potential storage solution).',
-      'Suggest error handling conventions (e.g., standard HTTP status codes, error response format).',
-      'Propose caching mechanisms if relevant (e.g., Redis, Memcached, CDN) based on potential performance needs.',
-      'Identify potential background jobs or asynchronous tasks based on Features.'
-    ]);
-  }
+  // --- Base Prompt Structure ---
+  let basePrompt = `# ${safeProjectName} Documentation Generator\n\n` +
+                   `## Agent Identity and Purpose\n\n` +
+                   `You are DocuMentor, a specialized AI documentation generator. Your task is to generate detailed, accurate, and production-ready technical documentation in JSON format based on the provided Project Context.${noDetailsWarning}\n\n` +
+                   `<documentation_rules>\n` +
+                   `1. **JSON Output Required:** The ENTIRE response must be a single, valid JSON object.\n` +
+                   `2. **Context Adherence:** Base content strictly on Project Context - DO NOT invent fictitious companies or websites.\n` +
+                   `3. **Deep Specificity:** Provide concrete examples and details based ONLY on what is provided.\n` +
+                   `4. **Rich Markdown:** Use proper markdown formatting within JSON string values.\n` +
+                   `5. **Production Ready:** All recommendations must be implementable.\n` +
+                   `6. **No Defaults:** If project details are minimal, create generalized documentation rather than inventing specific details.\n` +
+                   `</documentation_rules>\n\n` +
 
-  if (selectedDocs.appFlow) {
-    addSection('Application Flow', [
-      'Describe the user flow for a core feature using a numbered list or simple diagram description.',
-      'Detail the interaction sequence between frontend and backend (if applicable) for one key action (e.g., submitting a form).',
-      'Illustrate the data flow for a critical piece of information (e.g., from user input to database and back to UI).',
-      'Explain the handling of a specific edge case or error scenario mentioned in Key Challenges or implied by features.'
-    ]);
-  }
+                   `## Project Context\n\n` +
+                   `<project_details>\n` +
+                   `**Project Name:** ${safeProjectName}\n` +
+                   `**Project Type:** ${safeProjectType}\n` +
+                   `**Core Goal/Objective:** ${projectGoal?.trim() || 'Not Specified'}\n` +
+                   `${projectDescription ? `**Detailed Description:** ${projectDescription}\\n` : ''}` +
+                   `**Target Audience:** ${targetAudience?.trim() || 'Not Specified'}\n` +
+                   `**User Personas:** ${userPersonas?.trim() || 'Not Specified'}\n` +
+                   `**Key Features:**\\n${features?.trim() ? features.split(/[\\n,]+/).map(f => `- ${f.trim()}`).join('\\n') : '- Not Specified'}\\n` +
+                   `**Technology Stack:** ${techStack?.trim() || 'Not Specified'}\\n` +
+                   `${hasFrontend !== undefined ? `**Includes Frontend:** ${hasFrontend ? 'Yes' : 'No'}\\n` : ''}` +
+                   `${hasBackend !== undefined ? `**Includes Backend:** ${hasBackend ? 'Yes' : 'No'}\\n` : ''}` +
+                   `**Key Challenges/Risks:** ${keyChallenges?.trim() || 'Not Specified'}\n` +
+                   `**Success Metrics:** ${successMetrics?.trim() || 'Not Specified'}\n` +
+                   `</project_details>\n\n`;
 
-  if (selectedDocs.techStackDoc) {
-    addSection('Technology Stack Details', [
-      'Detailed breakdown of each technology listed in the Technology Stack.',
-      'Justification for choosing each major technology, linking it to the Project Goal or specific Features.',
-      'Specify recommended versions (e.g., Node.js LTS, latest stable React).',
-      'List key libraries/frameworks within the stack and explain their primary roles.',
-      'Identify potential integration points and challenges between stack components.',
-      'Provide links to official documentation for major technologies.'
-    ]);
-  }
+  // --- JSON Output Requirements (Single, Clear Block) ---
+  basePrompt += `## Required JSON Output Format\n\n` +
+                `<output_format>\n` +
+                `1. Response MUST be a single JSON object\n` +
+                `2. JSON object MUST contain ONLY these exact keys, one for each requested document type:\n` +
+                requestedDocTitles.map(title => `   - "${title}"\n`).join('') +
+                `3. Each key's value MUST be a markdown-formatted string containing the complete documentation\n` +
+                `4. Each markdown document MUST start with a level-1 heading matching its key\n` +
+                `5. NO text before or after the JSON object\n` +
+                `6. Do NOT group documents under a "general" key, use the exact keys specified above\n\n` +
+                `Example Structure:\n` +
+                `{\n` +
+                `  "${requestedDocTitles[0] || 'Document Title'}": "# ${requestedDocTitles[0] || 'Document Title'}\\n## Section 1\\nDetailed content...",\n` +
+                (requestedDocTitles.length > 1 ? `  "${requestedDocTitles[1]}": "# ${requestedDocTitles[1]}\\n## Overview\\nMore content..."\n` : `  "Another Document": "# Another Document\\n## Overview\\nMore content..."\n`) +
+                `}\n` +
+                `</output_format>\n\n`;
 
-  if (selectedDocs.systemPrompts && projectType?.toLowerCase().includes('ai')) {
-    addSection('AI System Prompts (Examples)', [
-      'Example system prompt for an AI feature derived from the project Features or Description.',
-      'Example user prompt and the expected AI response format/structure.',
-      'Outline strategies for managing conversation context or history.',
-      'Describe how the system should handle ambiguous user inputs or generation errors.'
-    ]);
-  }
+  // --- Final Instruction (Single, Clear) ---
+  basePrompt += `<final_instruction>\n` +
+                `Generate a JSON object containing complete documentation for exactly these ${requestedDocTitles.length} document types:\n\n` +
+                requestedDocTitles.map(title => `- "${title}"\n`).join('') +
+                `\nStrictly follow these rules:\n` +
+                `1. Output MUST be ONLY a clean JSON object: starts with '{' and ends with '}'\n` +
+                `2. Each document has comprehensive content in markdown format\n` +
+                `3. Content is specific to ${safeProjectName} and its context WITHOUT inventing fictional details\n` +
+                `4. Each document MUST have its own top-level key as listed above\n` +
+                `5. DO NOT create a "general" object containing document sections\n` +
+                `6. NO text outside the JSON structure\n` +
+                `</final_instruction>`;
 
-  if (selectedDocs.fileStructure) {
-    addSection('Recommended Project Structure', [
-      'Provide a tree-like representation of a recommended file/folder structure.',
-      'Tailor the structure based on the Technology Stack (e.g., Next.js conventions, standard backend layouts).',
-      'Include separate sections for frontend and backend if applicable.',
-      'Explain the purpose of key directories (e.g., `src/components`, `src/utils`, `server/routes`, `db/models`).'
-    ]);
-  }
-
-  prompt += `\\\\n**Final Instruction:** Generate the content for *only* the selected sections listed above. Ensure the output is a single, coherent markdown document starting directly with the first selected section heading. Do not include any introductory or concluding remarks outside of the requested sections.`;
-
-  return prompt;
+  console.log(`[buildPrompt] Generated prompt requesting ${requestedDocTitles.length} documents in JSON format.`);
+  return basePrompt;
 }
 
-// Reusable function for Gemini API calls
+// Interface for structured AI response (keys are document titles)
+interface StructuredGenerationResponse {
+  [documentTitle: string]: string;
+}
+
+// Interface for the final API response sent to frontend
+interface ApiResponseType {
+  status: 'completed' | 'failed' | 'processing';
+  message: string;
+  documents?: { title: string; content: string }[]; // Changed from content/sections
+  error?: string;
+  debug?: any;
+  requestId: string;
+}
+
+// Updated generateWithGemini (still relies on prompt for JSON)
 async function generateWithGemini(
   apiKey: string,
   modelName: string,
   prompt: string,
   requestId: string,
   isBackground: boolean
-): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with Gemini model: ${modelName}`);
+): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
+  console.log(`[${requestId}] Attempting generation with Gemini model: ${modelName} (Requesting JSON structure via prompt)`);
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: modelName, safetySettings });
 
   const generationConfig = {
     maxOutputTokens: TOKEN_LIMITS.gemini,
-    // Add other config like temperature if needed here
+    // NOTE: Add responseMimeType: "application/json" here if Gemini model supports it reliably
   };
 
   try {
@@ -319,8 +345,10 @@ async function generateWithGemini(
       {
         retries: 2,
         retryDelayMs: 1500,
-        onRetry: (attempt, error) => console.warn(`[${requestId}] Gemini attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
-        isBackground
+        onRetry: (attempt, error, willRetry) => console.warn(`[${requestId}] Gemini attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. ${willRetry ? 'Retrying...' : 'Giving up.'}`),
+        isBackground,
+        timeoutMs: isBackground ? 840000 : 60000, // Use longer timeout for background functions
+        errorMessage: `Gemini API call timed out for model ${modelName}`
       }
     );
 
@@ -353,6 +381,8 @@ async function generateWithGemini(
       console.warn(`[${requestId}] No parts found in Gemini candidate for model ${modelName}.`);
     }
 
+    combinedContent = combinedContent.replace(/^```json\s*([\s\S]*?)\s*```$/, '$1').trim(); // Clean ```json
+
     const inputTokens = Math.ceil(prompt.length / 4);
     const outputTokens = Math.ceil(combinedContent.length / 4);
     const totalTokens = inputTokens + outputTokens;
@@ -361,7 +391,7 @@ async function generateWithGemini(
     console.log(`[${requestId}] Gemini generation successful with ${modelName}. Estimated tokens: ${JSON.stringify(tokens)}`);
 
     return {
-      content: combinedContent,
+      responseText: combinedContent,
       modelUsed: modelName,
       tokens: tokens
     };
@@ -375,81 +405,107 @@ async function generateWithGemini(
   }
 }
 
-// Add similar wrappers for OpenAI and Anthropic if they exist
+// Updated generateWithOpenAI (using JSON mode)
 async function generateWithOpenAI(
   apiKey: string,
   prompt: string,
   requestId: string,
   isBackground: boolean
-): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with OpenAI model: ${OPENAI_MODEL}`);
+): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
+  console.log(`[${requestId}] Attempting generation with OpenAI model: ${OPENAI_MODEL} (JSON Mode Enabled)`);
   const openai = new OpenAI({ apiKey });
 
   try {
     const completionFn = () => openai.chat.completions.create({
         model: OPENAI_MODEL,
         messages: [
-          { role: "system", content: "You are a technical documentation writer. Generate detailed, accurate documentation based on the provided project context and instructions. Use Markdown formatting extensively." },
+          { role: "system", content: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid JSON objects containing markdown-formatted documentation. Always include at least one document in your response, even if minimal." },
           { role: "user", content: prompt }
         ],
         max_tokens: TOKEN_LIMITS.openai,
+        response_format: { type: "json_object" }, // Explicitly request JSON
+        temperature: 0.7, // Add temperature to control randomness
       });
+
+    // Add specific logging before the API call
+    console.log(`[${requestId}] Calling OpenAI API. Model: ${OPENAI_MODEL}, Background: ${isBackground}, Max Tokens: ${TOKEN_LIMITS.openai}`);
 
     const completion = await withRetry(
       completionFn,
       {
         retries: 2,
         retryDelayMs: 1500,
-        onRetry: (attempt, error) => console.warn(`[${requestId}] OpenAI attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
-        isBackground
+        onRetry: (attempt, error, willRetry) => console.warn(`[${requestId}] OpenAI attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. ${willRetry ? 'Retrying...' : 'Giving up.'}`),
+        isBackground,
+        timeoutMs: isBackground ? 840000 : 60000, // Use longer timeout for background functions
+        errorMessage: `OpenAI API call timed out for model ${OPENAI_MODEL}`
       }
     );
 
-    const content = completion.choices[0]?.message?.content;
-    const usage = completion.usage;
+    const responseText = completion.choices[0]?.message?.content;
 
-    if (!content) {
+    if (!responseText) {
       console.error(`[${requestId}] OpenAI Error: No content returned.`);
       throw new Error('No content generated by OpenAI.');
     }
+    
+    // Validate the response is proper JSON
+    try {
+      const jsonObj = JSON.parse(responseText);
+      if (Object.keys(jsonObj).length === 0) {
+        console.warn(`[${requestId}] OpenAI returned empty JSON object.`);
+      } else {
+        console.log(`[${requestId}] OpenAI JSON validation successful. Found ${Object.keys(jsonObj).length} document keys.`);
+      }
+    } catch (jsonError) {
+      console.error(`[${requestId}] OpenAI returned invalid JSON: ${responseText.substring(0, 100)}...`);
+      // Continue anyway, as the main parser will handle this more gracefully
+    }
 
     const tokens = {
-      input: usage?.prompt_tokens || 0,
-      output: usage?.completion_tokens || 0,
-      total: usage?.total_tokens || 0
+      input: completion.usage?.prompt_tokens || 0,
+      output: completion.usage?.completion_tokens || 0,
+      total: completion.usage?.total_tokens || 0
     };
 
     console.log(`[${requestId}] OpenAI generation successful. Tokens: ${JSON.stringify(tokens)}`);
 
     return {
-      content: content.trim(),
+      responseText: responseText || '',
       modelUsed: OPENAI_MODEL,
       tokens: tokens
     };
 
   } catch (error: any) {
-    console.error(`[${requestId}] Error calling OpenAI:`, error.message);
+    // Add more specific logging for connection errors
+    const errorMessage = error.message || String(error);
+    console.error(`[${requestId}] Error calling OpenAI:`, errorMessage);
      if (error.response?.data) {
       console.error(`[${requestId}] OpenAI API Error Details:`, error.response.data);
     }
-    throw new Error(`OpenAI API Error: ${error.message}`);
+    if (errorMessage.toLowerCase().includes('connection') || errorMessage.toLowerCase().includes('network')) {
+       console.error(`[${requestId}] OpenAI API call failed likely due to a network/connection issue.`);
+       throw new Error(`OpenAI API Error: Connection error. Please check network connectivity and OpenAI status.`);
+    }
+    throw new Error(`OpenAI API Error: ${errorMessage}`);
   }
 }
 
+// Updated generateWithAnthropic (relying on prompt for JSON)
 async function generateWithAnthropic(
   apiKey: string,
   prompt: string,
   requestId: string,
   isBackground: boolean
-): Promise<{ content: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL}`);
+): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
+  console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL} (Requesting JSON structure via prompt)`);
   const anthropic = new Anthropic({ apiKey });
 
   try {
     const messageFn = () => anthropic.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: TOKEN_LIMITS.anthropic,
-        system: "You are a technical documentation writer. Generate detailed, accurate documentation based on the provided project context and instructions. Use Markdown formatting extensively. Output only the requested markdown sections.",
+        system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object - no text before or after.",
         messages: [{ role: "user", content: prompt }],
       });
 
@@ -458,23 +514,27 @@ async function generateWithAnthropic(
       {
         retries: 2,
         retryDelayMs: 1500,
-        onRetry: (attempt, error) => console.warn(`[${requestId}] Anthropic attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. Retrying...`),
-        isBackground
+        onRetry: (attempt, error, willRetry) => console.warn(`[${requestId}] Anthropic attempt ${attempt} failed: ${error instanceof Error ? error.message : String(error)}. ${willRetry ? 'Retrying...' : 'Giving up.'}`),
+        isBackground,
+        timeoutMs: isBackground ? 840000 : 60000, // Use longer timeout for background functions
+        errorMessage: `Anthropic API call timed out for model ${ANTHROPIC_MODEL}`
       }
     );
 
-    let content = '';
+    let responseText = '';
     if (response.content && Array.isArray(response.content)) {
       // Handle potential TextBlock or other block types
-      content = response.content.map(block => block.type === 'text' ? block.text : '').join('');
+      responseText = response.content.map(block => block.type === 'text' ? block.text : '').join('');
     } else {
         console.warn(`[${requestId}] Unexpected Anthropic response content format:`, response.content);
     }
 
-    if (!content) {
+    if (!responseText) {
       console.error(`[${requestId}] Anthropic Error: No content returned. Stop reason: ${response.stop_reason}`);
       throw new Error(`No content generated by Anthropic. Stop Reason: ${response.stop_reason}`);
     }
+
+    responseText = responseText.replace(/^```json\s*([\s\S]*?)\s*```$/, '$1').trim(); // Clean ```json
 
     const usage = response.usage;
     const tokens = {
@@ -486,7 +546,7 @@ async function generateWithAnthropic(
     console.log(`[${requestId}] Anthropic generation successful. Tokens: ${JSON.stringify(tokens)}`);
 
     return {
-      content: content.trim(),
+      responseText: responseText,
       modelUsed: ANTHROPIC_MODEL,
       tokens: tokens
     };
@@ -501,154 +561,285 @@ async function generateWithAnthropic(
 }
 
 // Main API Handler
-export default async function handler(req: NextApiRequest, res: NextApiResponse<any>) {
-  // CORS Headers
-  const allowedOrigins = [
-    'https://cook-fast.webvijayi.com',
-    'https://cookfast.netlify.app',
-    'http://localhost:3000'
-  ];
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-     res.setHeader('Access-Control-Allow-Origin', '*'); // Be cautious with wildcard in production
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  res.setHeader('Vary', 'Origin');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST, OPTIONS');
-    return res.status(405).json({ message: 'Method Not Allowed' });
+    return res.status(405).json({ status: 'failed', error: 'Method not allowed' });
   }
 
-  // Generate a unique request ID
-  const requestId = req.body.requestId || `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-  console.log(`[${requestId}] Received generation request.`);
-  res.setHeader('X-Request-ID', requestId);
-
-  // Determine if running as a background function
+  // Extract request ID from headers or generate a new one
+  const requestId = req.headers['x-request-id'] as string || nanoid();
+  console.log(`[${requestId}] Starting documentation generation request`);
+  
+  // Check if this is a background function request from Netlify
   const isBackground = req.headers['x-netlify-background'] === 'true';
-  console.log(`[${requestId}] Running as background function: ${isBackground}`);
+  console.log(`[${requestId}] Background Processing: ${isBackground}`);
 
-  const { projectDetails, selectedDocs, provider, apiKey } = req.body as GenerateDocsRequestBody;
-
-  if (!projectDetails || !selectedDocs || !provider || !apiKey) {
-    console.error(`[${requestId}] Invalid request body: Missing required fields.`);
-    return res.status(400).json({ message: 'Invalid request body: Missing required fields.', requestId });
-  }
-
-  // Function to perform the generation logic
-  const performGeneration = async (isBackgroundFlag: boolean) => {
-    const startTime = Date.now();
-    let result: { content: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
-    const prompt = buildPrompt(projectDetails, selectedDocs);
-
-    try {
-      console.log(`[${requestId}] Starting generation with provider: ${provider}`);
-      if (provider === 'gemini') {
-          // Try primary model first, then fallback
-          try {
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, isBackgroundFlag);
-          } catch (primaryError: any) {
-            console.warn(`[${requestId}] Gemini primary model (${GEMINI_MODELS.PRIMARY}) failed: ${primaryError.message}. Trying fallback...`);
-            result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, isBackgroundFlag);
-          }
-      } else if (provider === 'openai') {
-        result = await generateWithOpenAI(apiKey, prompt, requestId, isBackgroundFlag);
-      } else if (provider === 'anthropic') {
-        result = await generateWithAnthropic(apiKey, prompt, requestId, isBackgroundFlag);
-      } else {
-        throw new Error('Invalid provider selected');
-      }
-
-      const endTime = Date.now();
-      const processingTimeMs = endTime - startTime;
-      console.log(`[${requestId}] Generation successful. Time taken: ${processingTimeMs}ms`);
-
-      const sections = parseContentToSections(result.content);
-      console.log(`[${requestId}] Parsed ${sections.length} sections from content.`);
-
-      const responseData = {
-        status: 'completed',
-        message: 'Documentation generated successfully.',
-        content: result.content,
-        sections: sections,
-        debug: {
-          provider: provider,
-          model: result.modelUsed,
-          timestamp: new Date(startTime).toISOString(),
-          processingTimeMs: processingTimeMs,
-          contentLength: result.content.length,
-          tokensUsed: result.tokens
-        },
-        requestId // Include requestId in final saved result
-      };
-
-      // Save the result to the store
-      await saveGenerationResult(requestId, responseData);
-      return responseData;
-
-    } catch (error: any) {
-      const endTime = Date.now();
-      const processingTimeMs = endTime - startTime;
-      console.error(`[${requestId}] Generation failed: ${error.message}. Time taken: ${processingTimeMs}ms`, error.stack);
-
-      const errorData = {
+  try {
+    // Extract required fields from request body
+    const body = req.body as GenerateDocsRequestBody;
+    const { projectDetails, selectedDocs, provider, apiKey } = body;
+    
+    // Validate required fields
+    if (!projectDetails || !selectedDocs || !provider || !apiKey) {
+      console.error(`[${requestId}] Missing required fields in request`);
+      return res.status(400).json({ 
         status: 'failed',
-        message: `Error generating documentation: ${error.message}`,
-        error: error.message,
-        debug: {
-          provider: provider,
-          model: provider === 'gemini' ? GEMINI_MODELS.PRIMARY : (provider === 'openai' ? OPENAI_MODEL : ANTHROPIC_MODEL), // Best guess model
-          timestamp: new Date(startTime).toISOString(),
-          processingTimeMs: processingTimeMs,
-        },
-        requestId // Include requestId in final saved result
-      };
-      
-      // Save error result to the store
-      await saveGenerationResult(requestId, errorData);
-      throw error; // Re-throw for background function handling or immediate response
-    }
-  };
-
-  // Handle background vs immediate execution
-  if (isBackground) {
-    console.log(`[${requestId}] Processing request in background.`);
-    performGeneration(isBackground).catch(err => {
-       // Errors are saved within performGeneration, just log here if needed
-       console.error(`[${requestId}] Background generation process failed: ${err.message}`);
-    });
-    // Respond immediately that background processing has started
-    return res.status(202).json({ 
-      status: 'processing',
-      message: 'Request accepted for background processing.', 
-      requestId: requestId 
-    });
-  } else {
-    // Process immediately and wait for the result
-    console.log(`[${requestId}] Processing request immediately.`);
-    try {
-      const resultData = await performGeneration(isBackground);
-      console.log(`[${requestId}] Immediate generation complete. Sending response.`);
-      return res.status(200).json(resultData);
-    } catch (error: any) {
-      console.error(`[${requestId}] Immediate generation failed. Sending error response.`);
-      // Error data is already saved in performGeneration, just return error status
-      return res.status(500).json({ 
-          status: 'failed',
-          message: `Error generating documentation: ${error.message}`,
-          error: error.message,
-          requestId 
+        error: 'Missing required fields: projectDetails, selectedDocs, provider, and apiKey are required', 
+        requestId 
       });
     }
+
+    // Convert selectedDocs object to array of keys where value is true
+    const selectedDocKeys = Object.entries(selectedDocs)
+      .filter(([, value]) => value)
+      .map(([key]) => key);
+    
+    if (selectedDocKeys.length === 0) {
+      console.error(`[${requestId}] No documents selected`);
+      return res.status(400).json({ 
+        status: 'failed', 
+        error: 'Please select at least one document type to generate',
+        requestId
+      });
+    }
+    
+    // Build the prompt from project details and selected documents
+    const prompt = buildPrompt(projectDetails, selectedDocs);
+    console.log(`[${requestId}] Built prompt for ${selectedDocKeys.length} document types`);
+    
+    // Process response based on provider
+    let result: { responseText: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
+    try {
+      console.log(`[${requestId}] Starting generation with ${provider} provider`);
+
+    switch (provider.toLowerCase()) {
+        case 'gemini':
+          // Try the primary model first, fall back to alternative if needed
+          try {
+            result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, isBackground);
+          } catch (error: any) {
+            console.log(`[${requestId}] Primary Gemini model failed, trying fallback: ${error.message}`);
+            result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, isBackground);
+          }
+          break;
+      case 'openai':
+          result = await generateWithOpenAI(apiKey, prompt, requestId, isBackground);
+        break;
+      case 'anthropic':
+          result = await generateWithAnthropic(apiKey, prompt, requestId, isBackground);
+        break;
+      default:
+          return res.status(400).json({ 
+            status: 'failed',
+            error: `Invalid provider: ${provider}. Supported providers are: gemini, openai, anthropic`,
+            requestId
+          });
+      }
+    } catch (generationError: any) {
+      console.error(`[${requestId}] Generation error with ${provider}:`, generationError.message);
+      
+      // If in background mode, store the error and return success with the requestId
+      if (isBackground) {
+        const errorData: ApiResponseType = {
+          status: 'failed',
+          message: 'Document generation failed',
+          error: generationError.message || 'Unknown error during generation',
+          requestId,
+          debug: {
+            provider,
+            timestamp: new Date().toISOString(),
+            error: generationError.message
+          }
+        };
+        
+        await saveGenerationResult(requestId, errorData);
+        return res.status(202).json({ 
+          message: 'Generation task started in background, but encountered an error',
+          requestId, 
+          isBackgroundProcessing: true 
+        });
+      }
+      
+      // If not background, return the error directly
+      return res.status(500).json({ 
+        status: 'failed',
+        error: generationError.message || 'Unknown error during generation',
+        requestId
+      });
+    }
+    
+    // Process the raw response text into structured data
+    console.log(`[${requestId}] Raw response from ${provider} (length: ${result.responseText.length}): ${result.responseText.substring(0, 200)}...`);
+    
+    // Add detailed logging of the raw response for debugging
+    console.log(`[${requestId}] Raw response from openai (length: ${result.responseText.length}):`, result.responseText);
+    
+    try {
+      // First check if the response is valid JSON
+      if (!result.responseText || result.responseText.trim() === '') {
+        throw new Error('Empty response received from AI provider');
+      }
+      
+      // Try to parse the JSON response from the AI
+      let parsedResponse: StructuredGenerationResponse;
+      try {
+        parsedResponse = JSON.parse(result.responseText);
+      } catch (jsonError: any) {
+        console.error(`[${requestId}] Failed to parse AI response: ${jsonError.message}`);
+        // Try to clean up the response if it might be wrapped in markdown code blocks
+        const cleanedResponse = result.responseText.replace(/^```json\s*([\s\S]*?)\s*```$/g, '$1').trim();
+        try {
+          parsedResponse = JSON.parse(cleanedResponse);
+          console.log(`[${requestId}] Successfully parsed JSON after cleaning markdown code blocks`);
+        } catch (secondError) {
+          // If still failing, rethrow the original error
+          throw jsonError;
+        }
+      }
+      
+      // Check if the response is empty or has no keys
+      if (!parsedResponse || Object.keys(parsedResponse).length === 0) {
+        console.error(`[${requestId}] AI provider returned empty JSON object: ${result.responseText}`);
+        
+        // Create a fallback document with error information
+        const fallbackContent = `# Generation Failed - Empty Response
+        
+## What Happened
+The AI provider (${provider.toUpperCase()}) returned an empty response. This could be due to:
+- Rate limiting
+- Token limits exceeded
+- Content filtering triggered
+- API connectivity issues
+
+## How to Fix
+1. Please try again with a different AI provider
+2. Simplify your project details and reduce the number of document types
+3. Check your API key and ensure it has proper permissions
+4. If using OpenAI or Anthropic, check your account usage and quotas
+
+## Technical Details
+- Provider: ${provider}
+- Model: ${result.modelUsed}
+- Timestamp: ${new Date().toISOString()}
+- Response Length: ${result.responseText.length} characters
+- Response Content: \`${result.responseText}\`
+`;
+
+        const fallbackDocuments = [{
+          title: "Error Report",
+          content: fallbackContent
+        }];
+        
+        // Create response with fallback documents and error flag
+        const errorData: ApiResponseType = {
+          status: 'completed', // Mark as completed, but with error flag
+          message: 'AI provider returned empty response. Fallback content generated.',
+          documents: fallbackDocuments,
+          requestId,
+          debug: {
+            provider,
+            model: result.modelUsed,
+            timestamp: new Date().toISOString(),
+            processingTimeMs: Date.now() - new Date().getTime(),
+            contentLength: result.responseText.length,
+            tokensUsed: result.tokens,
+            error: 'Empty response from AI provider',
+            originalResponse: result.responseText
+          }
+        };
+        
+        if (isBackground) {
+          await saveGenerationResult(requestId, errorData);
+          return res.status(202).json({ 
+            message: 'Document generation task started, but AI returned empty response',
+            requestId,
+            isBackgroundProcessing: true
+          });
+        }
+        
+        return res.status(200).json(errorData);
+      }
+      
+      // Convert the response to documents array format expected by the client
+      const documents = Object.entries(parsedResponse).map(([title, content]) => ({
+        title,
+        content: typeof content === 'string' ? content : JSON.stringify(content)
+      }));
+      
+      if (documents.length === 0) {
+        throw new Error('No documents were generated from non-empty response');
+      }
+      
+      // Create final response with debug info
+      const responseData: ApiResponseType = {
+        status: 'completed',
+        message: 'Documents generated successfully',
+        documents,
+        requestId,
+        debug: {
+          provider,
+          model: result.modelUsed,
+          timestamp: new Date().toISOString(),
+          processingTimeMs: Date.now() - new Date().getTime(),
+          contentLength: result.responseText.length,
+          tokensUsed: result.tokens
+        }
+      };
+      
+      // If this is a background process, store the result and return a simple response
+      if (isBackground) {
+        await saveGenerationResult(requestId, responseData);
+        return res.status(202).json({ 
+          message: 'Document generation task started',
+          requestId,
+          isBackgroundProcessing: true
+        });
+      }
+      
+      // Otherwise return the full result
+      return res.status(200).json(responseData);
+      
+    } catch (parseError: any) {
+      console.error(`[${requestId}] Failed to parse AI response:`, parseError.message);
+      
+      // Create error response
+      const errorData: ApiResponseType = {
+        status: 'failed',
+        message: 'Failed to parse generated documentation',
+        error: parseError.message || 'Invalid JSON response from AI provider',
+        requestId,
+        debug: {
+          provider,
+          model: result.modelUsed,
+          timestamp: new Date().toISOString(),
+          rawResponsePreview: result.responseText.substring(0, 500) + (result.responseText.length > 500 ? '...' : '')
+        }
+      };
+      
+      // If in background mode, store the error and return success with the requestId
+      if (isBackground) {
+        await saveGenerationResult(requestId, errorData);
+        return res.status(202).json({ 
+          message: 'Generation task started in background, but encountered a parsing error',
+          requestId,
+          isBackgroundProcessing: true
+        });
+      }
+      
+      // If not background, return the error directly
+      return res.status(500).json(errorData);
+    }
+    
+  } catch (error: any) {
+    console.error(`[${requestId}] Unhandled error in generate-docs API:`, error);
+    return res.status(500).json({ 
+      status: 'failed',
+      error: error.message || 'An unexpected error occurred',
+      requestId
+    });
   }
 }
 

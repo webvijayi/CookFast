@@ -113,3 +113,6 @@ logs
 .temp
 /tmp
 *.tmp
+
+# Docs folder
+/docs/

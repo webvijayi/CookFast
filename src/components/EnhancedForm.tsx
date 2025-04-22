@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 // SVG Icons with better styling
 const CheckIcon = () => (
@@ -48,7 +50,8 @@ interface Props {
     projectDetails: ProjectDetails,
     selectedDocs: DocumentSelection,
     provider: AIProvider,
-    apiKey: string
+    apiKey: string,
+    runInBackground: boolean
   ) => Promise<void>;
   isLoading: boolean;
   generationStage?: string;
@@ -111,15 +114,16 @@ export default function EnhancedForm({
     requirements: true,
     frontendGuidelines: true,
     backendStructure: true,
-    appFlow: true,
-    techStackDoc: true,
-    systemPrompts: true,
-    fileStructure: true,
+    appFlow: false,
+    techStackDoc: false,
+    systemPrompts: false,
+    fileStructure: false,
   });
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini');
   const [userApiKey, setUserApiKey] = useState<string>('');
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [animateStepChange, setAnimateStepChange] = useState(false);
+  const [runInBackground, setRunInBackground] = useState(true);
 
   // Reset validation when provider changes
   useEffect(() => {
@@ -222,67 +226,43 @@ export default function EnhancedForm({
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("EnhancedForm: handleSubmit called");
     
-    // Log detailed form data for debugging
-    console.log("Form submission data:", {
-      provider: selectedProvider,
-      projectDetails: projectDetails,
-      projectName: projectDetails.projectName,
-      projectGoal: projectDetails.projectGoal,
-      hasApiKey: !!userApiKey.trim(),
-      selectedDocs: selectedDocs,
-      selectedDocsCount: Object.values(selectedDocs).filter(Boolean).length
-    });
+    // Validation
+    if (currentStep === 1) {
+      if (!validateProviderStep()) return;
+      nextStep();
+      return;
+    }
     
-    if (!validateProviderStep() || !validateProjectStep()) {
-      // Jump to the step with errors
-      if (!validateProviderStep()) {
-        console.error("Provider validation failed");
-        setCurrentStep(1);
-      } else if (!validateProjectStep()) {
-        console.error("Project validation failed");
-        setCurrentStep(2);
+    if (currentStep === 2) {
+      if (!validateProjectStep()) return;
+      nextStep();
+      return;
+    }
+    
+    if (currentStep === 3) {
+      // Validate document selection
+      let selectedCount = 0;
+      for (const key in selectedDocs) {
+        if (selectedDocs[key as keyof DocumentSelection]) {
+          selectedCount++;
+        }
       }
-      return;
-    }
-
-    if (!hasSelectedDoc) {
-      console.error("No documents selected");
-      setFormErrors({ ...formErrors, docs: 'Please select at least one document type' });
-      setCurrentStep(3); // Ensure we show the document selection step when this error occurs
-      return;
-    }
-
-    console.log("EnhancedForm: Validation passed, calling onSubmit");
-    try {
-      // Verify data one more time before submitting
-      if (!projectDetails.projectName?.trim() || !projectDetails.projectGoal?.trim()) {
-        console.error("Final validation failed - required fields still missing");
-        setFormErrors({
-          ...((!projectDetails.projectName?.trim()) && { projectName: 'Project name is required' }),
-          ...((!projectDetails.projectGoal?.trim()) && { projectGoal: 'Project goal is required' })
-        });
-        
-        // Jump to the proper step
-        setCurrentStep(2);
+      
+      if (selectedCount === 0) {
+        setFormErrors({ ...formErrors, docs: 'Please select at least one document type' });
         return;
       }
       
-      // One final log of the document selection before submission
-      console.log("Final document selection being submitted:", selectedDocs);
-      
-      // Pass the collected data UP to the parent component via the onSubmit prop
-      console.log("EnhancedForm: Calling onSubmit prop with:", { 
+      // Submit the form with all data
+      // Always use background processing (true) regardless of UI state
+      await onSubmit(
         projectDetails,
         selectedDocs,
-        provider: selectedProvider,
-        apiKey: userApiKey
-      });
-      await onSubmit(projectDetails, selectedDocs, selectedProvider, userApiKey);
-      console.log("EnhancedForm: onSubmit prop finished.");
-    } catch (error) {
-      console.error("Error in form submission:", error);
+        selectedProvider,
+        userApiKey,
+        true // Always true - background processing is always enabled
+      );
     }
   };
 
@@ -626,7 +606,7 @@ export default function EnhancedForm({
         </div>
         
         {formErrors.docs && (
-          <p className="text-red-500 text-sm">{formErrors.docs}</p>
+          <p className="text-red-500 text-sm mt-2">{formErrors.docs}</p>
         )}
       </div>
       

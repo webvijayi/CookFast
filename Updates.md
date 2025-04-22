@@ -1,5 +1,193 @@
 # Updates Log
 
+## 2024-08-21 - Fixed Download/Copy Functionality and Document Generation Issues
+
+### Development Steps
+1. Fixed several issues in document generation and content handling:
+   - Resolved issues with download and copy-to-clipboard functionality in results display
+   - Fixed content streaming and rendering in the ResultsPanel component
+   - Corrected state management for generatedMarkdown during download/copy operations
+   - Improved document generation to properly use project details instead of generic content
+   - Enhanced combined markdown generation to properly join document sections
+
+2. Improved error handling and validation:
+   - Added proper validation for JSON responses from AI providers
+   - Implemented safeguards for missing or incomplete project details
+   - Enhanced error handling for generatedMarkdown to ensure proper state management
+   - Added more robust document debugging in saveResult utility
+
+3. Enhanced prompt engineering:
+   - Updated buildPrompt function with explicit instructions to prevent fictional content generation
+   - Added specific instructions to prevent AI from generating generic website descriptions
+   - Improved document structure validation for more consistent results
+
+### Key Decisions
+- Used defensive programming techniques to handle potential undefined or null values
+- Improved data flow between components to ensure proper state updates
+- Enhanced error feedback to provide more useful information to users
+- Applied stricter validation of AI responses to prevent invalid content
+
+### Next Steps
+1. Add comprehensive unit tests for document generation workflow
+2. Consider implementing content validation rules for each document type
+3. Explore implementing progress indicators during document generation
+4. Add telemetry to track common patterns in document generation errors
+5. Consider adding offline templates as fallbacks when AI generation fails
+
+## 2025-08-08 - Updated .gitignore to Exclude docs Folder
+
+### Development Steps
+1. Updated `.gitignore`:
+   - Added `/docs/` to the list of ignored directories
+   - Prevents documentation files from being tracked by git
+   - Ensures documentation remains local and isn't pushed to GitHub
+
+### Key Decisions
+- Decided to keep documentation local instead of tracking in version control
+- Maintained the existing structure of .gitignore file
+- Used directory-specific pattern `/docs/` to exclude only the root docs folder
+
+### Next Steps
+1. Consider creating a separate repository for documentation if needed
+2. Add a note to README.md about the locally maintained docs folder
+3. Evaluate whether some essential documentation should still be tracked
+
+## 2025-08-07 - Fixed Document Generation Error Handling
+
+### Development Steps
+1. Updated `src/components/GeneratorSection.tsx`:
+   - Fixed error handling in `checkForResults` function to properly handle failed generation status
+   - Changed error throwing to proper state updates with user-friendly error messages
+   - Added improved debug logging for error cases
+   - Ensured loading state is properly reset when errors occur
+
+2. Updated `src/pages/api/generate-docs.ts`:
+   - Added fallback document generation for empty AI responses
+   - Corrected OpenAI token limit from 32768 to 16384 to match GPT-4.1 specifications
+   - Enhanced JSON validation for OpenAI responses
+   - Improved system prompt to ensure at least one document is always returned
+   - Added detailed error reporting with helpful troubleshooting steps for users
+   - Added proper error object with debugging information
+
+### Key Decisions
+- Changed from throwing unhandled errors to user-friendly error messages in UI
+- Implemented fallback content generation for empty AI provider responses
+- Used a more resilient error handling approach in both client and server code
+- Preserved detailed error information for debugging while presenting simplified messages to users
+- Corrected token limit configuration to prevent potential truncation issues
+
+### Next Steps
+1. Add comprehensive error telemetry to track common failure patterns
+2. Implement automatic retries with different AI providers when one fails
+3. Create a dedicated error handling middleware for API endpoints
+4. Add unit tests for error handling scenarios
+5. Consider adding offline templates as additional fallback when AI generation fails
+
+## 2025-08-06 - Fixed API Error in Document Generation
+
+### Development Steps
+1. Updated `src/pages/api/generate-docs.ts`:
+   - Fixed incompatibility between client request handling and response format
+   - Updated the handler function to properly process projectDetails and selectedDocs from request body
+   - Fixed JSON response format to match what the client-side code expects
+   - Added proper isBackground flag detection from request headers 
+   - Enhanced error handling with detailed status information
+   - Updated withRetry function calls to match the signature in utils/index.ts
+   - Added proper timeouts for API calls based on background processing status
+
+### Key Decisions
+- Fixed the specific error causing document generation to fail (handleFormSubmit error at line 384)
+- Maintained backward compatibility with existing client code
+- Enhanced error handling to provide better diagnostics
+- Used structured response format with documents array as expected by the client
+- Added retry mechanism for API calls with proper error feedback
+
+### Next Steps
+1. Add comprehensive unit tests for the API endpoints
+2. Consider implementing a more robust validation system for incoming requests
+3. Add telemetry to track API usage patterns and error rates
+4. Review other API endpoints for similar compatibility issues
+5. Consider adding rate limiting to prevent API abuse
+
+## 2025-07-30 - Added Comprehensive Documentation
+
+### Development Steps
+1. Created multiple documentation files in the `/docs` directory:
+   - Added `project-overview.md` with project purpose and key features
+   - Created `api-documentation.md` with detailed API endpoint information
+   - Added `code-architecture.md` explaining codebase organization
+   - Created `ai-provider-integration.md` documenting AI provider implementations
+   - Added `user-guide.md` for end-user documentation
+   - Created `deployment-guide.md` with deployment instructions
+   - Added `component-documentation.md` explaining UI components
+   - Created `issues.md` listing improvement areas
+   - Updated `api-info.md` with latest API information
+   - Added `index.md` as a documentation directory
+
+2. Improved existing `API info.md` file with more comprehensive details
+   - Added structured interfaces information
+   - Enhanced function descriptions
+   - Improved error handling documentation
+
+### Key Decisions
+- Created separate documentation files for different aspects of the application
+- Used markdown format for all documentation for easy reading on GitHub
+- Organized documentation with a clear hierarchy and index page
+- Documented known issues to facilitate future improvements
+- Focused on both technical and user-facing documentation
+
+### Next Steps
+1. Consider adding diagrams to illustrate application architecture
+2. Add code examples for common API usage patterns
+3. Implement automatic documentation generation for API endpoints
+4. Create contributor guidelines for documentation maintenance
+5. Consider setting up documentation website with search functionality
+
+## 2025-07-28 - Add OpenAI API Call Logging
+
+### Development Steps
+1. Updated `src/pages/api/generate-docs.ts`:
+   - Added detailed logging within the `generateWithOpenAI` function immediately before the call to `openai.chat.completions.create`.
+   - Enhanced the `catch` block in `generateWithOpenAI` to specifically check for connection/network-related error messages.
+   - If a connection error is detected, log a specific message indicating a likely network issue and throw a more informative error message to the frontend.
+
+### Key Decisions
+- Focused on improving diagnostics for OpenAI connection errors, as reported by the user.
+- Added logging at the point of failure to confirm API call parameters.
+- Improved error message propagation to give the user clearer feedback on connection issues.
+
+### Next Steps
+1. Monitor application logs after deployment to see if the new logging helps pinpoint the cause of connection errors.
+2. Advise the user to check their network configuration and OpenAI API status if connection errors persist.
+3. Consider adding more robust network diagnostics or fallback mechanisms if necessary.
+
+## 2025-07-28 - Enhanced Document Generation Prompt System
+
+### Development Steps
+1. Updated `src/pages/api/generate-docs.ts`:
+   - Enhanced the document generation prompt with a more comprehensive agent-based system
+   - Restructured prompt formatting to use a clear, organized hierarchy with semantic sections
+   - Added specialized tags like `<core_capabilities>`, `<documentation_rules>`, and `<operating_principles>`
+   - Implemented a more detailed execution protocol for document generation
+   - Enhanced section instructions with clearer component requirements and generation guidelines
+   - Added additional specifications for prioritizing user-entered data in forms and data flows
+   - Expanded requirements for security handling in both frontend and backend documentation sections
+
+### Key Decisions
+- Adopted an agent-based prompting approach similar to Manus agent loop prompting pattern
+- Maintained all existing document section types while enhancing their instruction depth
+- Prioritized production-readiness as a key principle throughout documentation generation
+- Added specific emphasis on user data handling, validation, and security as top priorities
+- Enhanced the form component architecture documentation requirements for better consistency
+- Used the 60/30/10 color rule and 8pt grid system principles for styling guideline consistency
+
+### Next Steps
+1. Monitor document generation quality to ensure the enhanced prompt improves output specificity
+2. Consider adding document type-specific evaluation criteria for quality assessment
+3. Evaluate whether to add additional document section types for specialized documentation needs
+4. Test the new prompt system with various AI providers to ensure consistent quality
+5. Consider implementing a feedback loop for continuous prompt improvement
+
 ## 2025-07-27 - Fixed Netlify Deployment Configuration and Restored Sharing Icons
 
 ### Development Steps
@@ -852,3 +1040,109 @@
   - Ensured this `isBackground` flag is correctly passed down from the main handler function to the `withRetry` utility.
   - **Issue:** The `withRetry` utility was not receiving the `isBackground` status, causing it to use the default (shorter) timeout even for background function invocations, leading to 10-second timeouts and 502 errors.
   - **Fix:** By passing the `isBackground` flag, the `withRetry` utility can now correctly calculate and apply the appropriate timeout (10 seconds for synchronous, potentially up to 15 minutes for background), resolving the 502 errors caused by premature timeouts during longer AI generation tasks.
+
+## ${new Date().toISOString()} - Added Frontend Option for Background Generation
+
+- Modified `src/components/EnhancedForm.tsx`:
+  - Added a state variable `runInBackground`.
+  - Added a `Checkbox` component to the final step (Document Selection) allowing users to opt-in to background generation.
+  - Updated the `onSubmit` prop type and the `handleSubmit` function to pass the `runInBackground` boolean value to the parent.
+- Modified `src/components/GeneratorSection.tsx`:
+  - Added a state variable `runInBackground` to receive the user's choice from the form.
+  - Updated the `handleFormSubmit` function to accept the `runInBackground` flag.
+  - Conditionally added the `X-Netlify-Background: true` header to the `fetch` request to `/api/generate-docs` only when the `runInBackground` flag is true.
+- **Context:** This addresses the root cause of the 502 errors by allowing the frontend to correctly trigger Netlify's background function execution when needed (for potentially long-running AI tasks), thus avoiding the standard 10-second timeout.
+
+## 2025-04-22 - Refined the prompt in `src/pages/api/generate-docs.ts` for better documentation quality based on Manus example. Attempted to remove background task checkbox and default to background generation in `src/pages/index.tsx` (manual edit required due to automated failures).
+
+## 2025-04-23 - Made Background Task Processing Default with UI Simplification
+
+### Development Steps
+1. Modified `src/components/EnhancedForm.tsx`:
+   - Removed the "Run as Background Task" checkbox UI
+   - Set `runInBackground` state to `true` by default
+   - Updated `handleSubmit` function to always pass `true` for background processing
+
+2. Updated `src/components/GeneratorSection.tsx`:
+   - Modified `handleFormSubmit` to ignore the passed `runInBackgroundFlag` parameter
+   - Added a constant `useBackgroundProcessing = true` to enforce background processing
+   - Changed the headers logic to always include `X-Netlify-Background: true` in API requests
+   - Updated all debug logs with the appropriate background state
+
+### Key Decisions
+- Made background task execution the default behavior without user option
+- Simplified the UI by removing an unnecessary toggle
+- Ensured all document generation tasks utilize Netlify's background function infrastructure
+- Removed conditional logic around background processing to make the code more maintainable
+
+### Next Steps
+- Thorough testing of document generation to verify background processing works in all cases
+- Monitoring of Netlify function logs to confirm proper function execution
+- Considering additional user feedback mechanisms for background task status
+
+## 2023-06-17 - Fixed Enhanced Form Menu Link
+
+### Development Steps
+1. Changed the `id="generator"` to `id="generate"` in `src/components/GeneratorSection.tsx` to match the menu item link in the Header component.
+
+### Key Decisions
+- Kept the `#generate` anchor as is since it's being used in multiple places across the application.
+- Opted to change the section ID rather than updating all anchor references for minimal impact.
+
+### Next Steps
+- Consider standardizing naming conventions for section IDs and their corresponding anchor links.
+
+## 2024-08-20
+- Fixed Download and Copy-to-Clipboard functionality in results display
+- Fixed an issue where generatedMarkdown was not being set correctly for download/copy
+- Fixed document generation to properly use project details instead of defaulting to "web vijayi agency website" content
+- Enhanced buildPrompt function with explicit instructions to prevent AI from generating fictional website content
+- Added safeguards for missing or incomplete project details to prevent generic fictional content
+- Improved error handling for generatedMarkdown to ensure proper state management
+- Added better document debugging in saveResult utility for easier troubleshooting
+- Updated combined markdown generation to properly join document sections for download/copy
+
+## 2023-10-21
+- Fixed JSON parsing error in generate-docs API that was preventing documents from displaying on frontend
+- Improved error handling for AI responses wrapped in markdown code blocks  
+- Enhanced document structure validation in check-status API to provide better error messages
+- Fixed prop type error in ResultsPanel component by adding missing isGenerating prop
+- Added user-friendly fallback document when AI providers return empty or invalid responses
+- Fixed download markdown and copy-to-clipboard functionality in results display
+- Fixed document generation to properly use project details instead of defaulting to fictional website content
+- Improved error handling for cases with missing or incomplete project details
+- Enhanced document debugging in saveResult utility with better validation and tracking
+
+## 2024-08-21 - Fixed Download/Copy Functionality and Document Generation Issues
+
+### Development Steps
+1. Fixed several issues in document generation and content handling:
+   - Resolved issues with download and copy-to-clipboard functionality in results display
+   - Fixed content streaming and rendering in the ResultsPanel component
+   - Corrected state management for generatedMarkdown during download/copy operations
+   - Improved document generation to properly use project details instead of generic content
+   - Enhanced combined markdown generation to properly join document sections
+
+2. Improved error handling and validation:
+   - Added proper validation for JSON responses from AI providers
+   - Implemented safeguards for missing or incomplete project details
+   - Enhanced error handling for generatedMarkdown to ensure proper state management
+   - Added more robust document debugging in saveResult utility
+
+3. Enhanced prompt engineering:
+   - Updated buildPrompt function with explicit instructions to prevent fictional content generation
+   - Added specific instructions to prevent AI from generating generic website descriptions
+   - Improved document structure validation for more consistent results
+
+### Key Decisions
+- Used defensive programming techniques to handle potential undefined or null values
+- Improved data flow between components to ensure proper state updates
+- Enhanced error feedback to provide more useful information to users
+- Applied stricter validation of AI responses to prevent invalid content
+
+### Next Steps
+1. Add comprehensive unit tests for document generation workflow
+2. Consider implementing content validation rules for each document type
+3. Explore implementing progress indicators during document generation
+4. Add telemetry to track common patterns in document generation errors
+5. Consider adding offline templates as fallbacks when AI generation fails

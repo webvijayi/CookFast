@@ -20,85 +20,46 @@ const DocumentTabs = React.forwardRef<
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
   const [canScrollRight, setCanScrollRight] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<string | undefined>(defaultValue || sections[0]?.title);
+  const [activeTab, setActiveTab] = React.useState<string | undefined>(() => {
+    const firstValidTitle = sections && sections.length > 0 ? sections[0].title : undefined;
+    return defaultValue || firstValidTitle;
+  });
 
-  // Add check for empty sections or error content
-  const validSections = React.useMemo(() => {
-    if (!sections || sections.length === 0) {
+  const isValidSectionsData = Array.isArray(sections) && sections.length > 0;
+
+  const displayedSections = React.useMemo(() => {
+    if (isValidSectionsData) {
+      if (typeof window !== 'undefined') {
+        console.log('Document sections received:', sections.map(s => ({
+          title: s.title,
+          contentType: typeof s.content,
+          contentLength: typeof s.content === 'string' ? s.content.length : 'n/a',
+          isReactNode: React.isValidElement(s.content)
+        })));
+      }
+      return sections;
+    } else {
+      console.warn('Invalid or empty sections data received. Displaying error tab.');
       return [{
         title: "Documentation Error",
         content: (
-          <div className="p-4 rounded-md bg-red-50 border border-red-200">
-            <h3 className="text-red-800 font-medium mb-2">Documentation Error</h3>
-            <p className="text-red-700">No content was generated. Please try again with different settings or AI provider.</p>
+          <div className="p-4 rounded-md bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800/50">
+            <h3 className="text-red-800 dark:text-red-300 font-medium mb-2">Generation Error</h3>
+            <p className="text-red-700 dark:text-red-400">No valid documentation content was generated or received. Please check the generation logs or try again.</p>
           </div>
         )
       }];
     }
-    
-    // Improved content validation logic
-    const hasValidContent = sections.some(section => {
-      // If content is a string, check if it has non-whitespace content
-      if (typeof section.content === 'string') {
-        return section.content.trim().length > 0;
-      }
-      
-      // If content is a React element, consider it valid
-      if (React.isValidElement(section.content)) {
-        return true;
-      }
-      
-      // Handle cases where content is an object (like from JSON)
-      if (section.content && typeof section.content === 'object') {
-        // For objects that have a toString method or can be stringified
-        try {
-          const contentStr = String(section.content);
-          return contentStr && contentStr.trim().length > 0 && contentStr !== '[object Object]';
-        } catch (e) {
-          return false;
-        }
-      }
-      
-      return false;
-    });
-    
-    // Additional check for specific titles that indicate generated content
-    const hasRecognizedTitles = sections.some(section => {
-      const title = section.title?.toLowerCase() || '';
-      return title.includes('requirements') || 
-             title.includes('guidelines') || 
-             title.includes('structure') || 
-             title.includes('flow') || 
-             title.includes('technology') ||
-             title.includes('system') ||
-             title.includes('introduction');
-    });
-    
-    // Only show warning if both content and title checks fail
-    if (!hasValidContent && !hasRecognizedTitles) {
-      return [{
-        title: "Documentation Warning",
-        content: (
-          <div className="p-4 rounded-md bg-yellow-50 border border-yellow-200">
-            <h3 className="text-yellow-800 font-medium mb-2">Documentation Warning</h3>
-            <p className="text-yellow-700">No content provided. Please try regenerating the documentation.</p>
-          </div>
-        )
-      }];
+  }, [sections, isValidSectionsData]);
+
+  React.useEffect(() => {
+    const currentTitles = displayedSections.map(s => s.title);
+    if (activeTab && !currentTitles.includes(activeTab)) {
+      setActiveTab(currentTitles[0] || undefined);
+    } else if (!activeTab && currentTitles.length > 0) {
+      setActiveTab(currentTitles[0]);
     }
-    
-    // Always log section info for debugging
-    if (typeof window !== 'undefined') {
-      console.log('Document sections:', sections.map(s => ({
-        title: s.title,
-        contentType: typeof s.content,
-        contentLength: typeof s.content === 'string' ? s.content.length : 'n/a'
-      })));
-    }
-    
-    // Return original sections if they have valid content or recognized titles
-    return sections;
-  }, [sections]);
+  }, [displayedSections, activeTab]);
 
   const checkScrollability = React.useCallback(() => {
     const scrollEl = scrollRef.current;
@@ -114,7 +75,7 @@ const DocumentTabs = React.forwardRef<
     checkScrollability();
     window.addEventListener("resize", checkScrollability);
     return () => window.removeEventListener("resize", checkScrollability);
-  }, [checkScrollability, validSections]); // Update dependency from sections to validSections
+  }, [checkScrollability, displayedSections]);
 
   const scrollLeft = () => {
     if (scrollRef.current) {
@@ -131,7 +92,6 @@ const DocumentTabs = React.forwardRef<
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     
-    // When tab changes, ensure the tab is visible by scrolling to it
     if (scrollRef.current) {
       const tabElement = scrollRef.current.querySelector(`[data-value="${value}"]`) as HTMLElement;
       if (tabElement) {
@@ -139,7 +99,6 @@ const DocumentTabs = React.forwardRef<
         const tabRect = tabElement.getBoundingClientRect();
         const containerRect = scrollContainer.getBoundingClientRect();
         
-        // Check if tab is outside the visible area
         if (tabRect.left < containerRect.left || tabRect.right > containerRect.right) {
           tabElement.scrollIntoView({
             behavior: 'smooth',
@@ -151,11 +110,9 @@ const DocumentTabs = React.forwardRef<
     }
   };
 
-  // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!scrollRef.current) return;
     
-    // Handle left/right arrow keys for horizontal navigation
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       const direction = e.key === 'ArrowLeft' ? -1 : 1;
@@ -167,10 +124,10 @@ const DocumentTabs = React.forwardRef<
   };
 
   return (
-    <Tabs 
-      defaultValue={defaultValue || validSections[0]?.title} // Use validSections instead of sections
-      className={cn("w-full", className)} 
-      {...props} 
+    <Tabs
+      defaultValue={defaultValue || displayedSections[0]?.title}
+      className={cn("w-full", className)}
+      {...props}
       ref={ref}
       onValueChange={handleTabChange}
       value={activeTab}
@@ -200,7 +157,7 @@ const DocumentTabs = React.forwardRef<
               role="tablist"
               aria-orientation="horizontal"
             >
-              {validSections.map((section) => ( // Use validSections instead of sections
+              {displayedSections.map((section: { title: string; content: React.ReactNode }) => (
                 <TabsTrigger 
                   key={section.title} 
                   value={section.title} 
@@ -228,7 +185,7 @@ const DocumentTabs = React.forwardRef<
         )}
       </div>
       
-      {validSections.map((section) => ( // Use validSections instead of sections
+      {displayedSections.map((section: { title: string; content: React.ReactNode }) => (
         <TabsContent key={section.title} value={section.title} className="mt-4">
           {section.content}
         </TabsContent>

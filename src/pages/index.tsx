@@ -211,7 +211,6 @@ const JsonIcon = ({ className = "h-5 w-5" }: { className?: string }) => ( <svg x
 // ResultsPanel component to display generated documentation
 const ResultsPanel = ({
   documentSections,
-  generatedMarkdown,
   onDownload,
   onCopy,
   onDownloadJSON,
@@ -219,10 +218,10 @@ const ResultsPanel = ({
   onRetry,
   theme,
   debugInfo,
-  workPhase
+  workPhase,
+  isGenerating
 }: {
   documentSections: DocumentSection[] | undefined,
-  generatedMarkdown: string | undefined,
   onDownload: () => void,
   onCopy: () => void,
   onDownloadJSON: (debugInfo: any) => void,
@@ -230,12 +229,24 @@ const ResultsPanel = ({
   onRetry: () => void,
   theme?: string,
   debugInfo?: any,
-  workPhase: WorkPhase
+  workPhase: WorkPhase,
+  isGenerating: boolean
 }) => {
-  // Safety checks for missing data
-  const hasDocumentSections = documentSections && Array.isArray(documentSections) && documentSections.length > 0;
-  const hasGeneratedMarkdown = generatedMarkdown && generatedMarkdown.trim().length > 0;
-  const canRetry = workPhase === 'error' || workPhase === 'complete';
+  const { theme: componentTheme } = useTheme();
+  
+  // Use documentSections directly from props
+  const hasGeneratedDocs = Array.isArray(documentSections) && documentSections.length > 0;
+
+  // Log received documents for debugging
+  useEffect(() => {
+    if (hasGeneratedDocs) {
+      console.log('ResultsPanel received documents:', documentSections.map(d => ({ title: d.title, contentLength: d.content?.length })))
+    } else {
+      console.log('ResultsPanel received no documents or empty array.');
+    }
+  }, [documentSections, hasGeneratedDocs]);
+
+  const canRetry = workPhase === 'error' || workPhase === 'complete'; // Determine if retry is possible
 
   return (
     <div className="container max-w-6xl mx-auto px-4 py-12">
@@ -252,51 +263,47 @@ const ResultsPanel = ({
 
       <div className="flex flex-col gap-6">
         <div className="flex gap-4 justify-center flex-wrap">
-          {hasGeneratedMarkdown && (
+          {hasGeneratedDocs && (
             <>
-               <Button variant="outline" onClick={onDownload} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+               <Button variant="outline" onClick={onDownload} disabled={!hasGeneratedDocs}>
                   Download Markdown
                </Button>
-               <Button variant="outline" onClick={onCopy} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+               <Button variant="outline" onClick={onCopy} disabled={!hasGeneratedDocs}>
                   Copy to Clipboard
                </Button>
-               <Button variant="outline" onClick={() => onDownloadJSON(debugInfo)} disabled={!hasGeneratedMarkdown && !hasDocumentSections}>
+               <Button variant="outline" onClick={() => onDownloadJSON(debugInfo)} disabled={!hasGeneratedDocs}>
                   Download as JSON
                </Button>
             </>
           )}
           {canRetry && (
-            <Button variant="secondary" onClick={onRetry}>
-              Retry Generation
-            </Button>
-          )}
-          <Button variant="default" onClick={onReset}>
-            Generate New Documentation
-          </Button>
-        </div>
-
-        {workPhase === 'error' && !hasGeneratedMarkdown && (
+             <Button variant="secondary" onClick={onRetry} disabled={isGenerating}>
+               Retry Generation
+             </Button>
+           )}
+          {workPhase === 'error' && !hasGeneratedDocs && (
              <div className="text-center p-8 border rounded-lg border-destructive bg-destructive/10">
                <p className="text-destructive">
                  <AlertTriangleIcon className="inline h-5 w-5 mr-1" />
                  Documentation generation failed. Please check the logs or try again.
                </p>
              </div>
-        )}
+          )}
+          <Button variant="default" onClick={onReset}>
+            Generate New Documentation
+          </Button>
+        </div>
 
-        {hasDocumentSections ? (
-          <div className="w-full">
+        {hasGeneratedDocs ? (
+          <div className="w-full max-w-none">
             <DocumentTabs
-              sections={documentSections.map((section) => ({
-                title: section.title,
+              sections={documentSections.map((doc) => ({
+                title: doc.title,
                 content: (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{section.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
+                  <Card className="mt-1">
+                    <CardContent className="p-4 md:p-6">
                       <ClientOnly>
-                        <MarkdownRenderer content={section.content} isDarkMode={theme === 'dark'} />
+                        <MarkdownRenderer content={doc.content || 'No content generated for this document.'} isDarkMode={componentTheme === 'dark'} />
                       </ClientOnly>
                     </CardContent>
                   </Card>
@@ -304,27 +311,21 @@ const ResultsPanel = ({
               }))}
             />
           </div>
-        ) : hasGeneratedMarkdown ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Complete Documentation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ClientOnly>
-                <MarkdownRenderer content={generatedMarkdown} isDarkMode={theme === 'dark'} />
-              </ClientOnly>
-            </CardContent>
-          </Card>
         ) : (
-          <div className="text-center p-8 border rounded-lg">
-            <p className="text-amber-600 dark:text-amber-400">
-              <AlertTriangleIcon className="inline h-5 w-5 mr-1" />
-              No documentation sections found. Regenerate or try with different parameters.
-            </p>
-          </div>
+          <Card>
+             <CardHeader>
+               <CardTitle className="text-amber-700 dark:text-amber-400">Generation Result</CardTitle>
+             </CardHeader>
+             <CardContent>
+                <div className="text-center p-4 border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 rounded-md text-amber-800 dark:text-amber-300">
+                  <AlertTriangleIcon className="inline h-5 w-5 mr-1" />
+                  No documentation content was successfully generated or parsed. Please check logs or try again.
+                </div>
+             </CardContent>
+           </Card>
         )}
         
-        {/* Generation logs display - moved outside tabs for visibility */}
+        {/* Generation logs display */}
         <GenerationLogs />
       </div>
     </div>
@@ -373,7 +374,7 @@ export default function CookFastHome() {
     fileStructure: false
   });
   const [userApiKey, setUserApiKey] = useState('');
-  const [isValidatingKey, setIsValidatingKey] = useState(false);
+  const [isValidating, setIsValidating] = useState<boolean>(false);
   const [keyValidationStatus, setKeyValidationStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
   const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -438,7 +439,7 @@ export default function CookFastHome() {
 
   const handleValidateKey = async () => {
     if (!userApiKey.trim()) { setKeyValidationError("API key cannot be empty."); setKeyValidationStatus('invalid'); addDebugLog('Validation Failed', { reason: 'Empty API key' }); return; }
-    setIsValidatingKey(true); setKeyValidationStatus('idle'); setKeyValidationError(null); setError(null); setResults(null); // Clear other messages
+    setIsValidating(true); setKeyValidationStatus('idle'); setKeyValidationError(null); setError(null); setResults(null); // Clear other messages
     addDebugLog('Validation Started', { provider: selectedProvider, keyLength: userApiKey.length });
 
     try {
@@ -462,7 +463,7 @@ export default function CookFastHome() {
       setKeyValidationError(err instanceof Error ? err.message : "Network error or issue during validation request.");
       addDebugLog('Validation Error', { error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setIsValidatingKey(false);
+      setIsValidating(false);
     }
   };
 
@@ -529,73 +530,99 @@ export default function CookFastHome() {
     document.dispatchEvent(statusEvent);
   };
 
-  // Event handlers and document processing
+  // Updated event handler for generation success
   useEffect(() => {
     const handleGenerationSuccess = (e: Event) => {
+      setIsGenerating(false);
+      setGenerationProgress(100); // Mark as complete
+      setWorkPhase('complete');
+      console.log('Received generation:success event');
+
       try {
         const customEvent = e as CustomEvent;
         if (!customEvent.detail) {
           console.error('Generation success event received but no detail data was provided');
-          setWorkPhase('error');
           addDebugLog('Error: Missing Generation Success Data');
+          setDocumentSections([]); 
+          setGeneratedMarkdown(''); // Ensure generatedMarkdown is cleared
           return;
         }
         
-        const { content, sections, debug } = customEvent.detail;
+        // Destructure expected fields: documents and debug
+        const { documents, debug } = customEvent.detail; 
 
-        // Ensure we have at least content or sections
-        if (!content && (!sections || !Array.isArray(sections) || sections.length === 0)) {
-          console.error('Generation success event received but no content or sections were provided');
-          setWorkPhase('error');
-          addDebugLog('Error: Invalid Generation Success Data - No Content/Sections', { detail: customEvent.detail });
-          // Optionally set generatedMarkdown to an error message or leave empty
-          setGeneratedMarkdown('Error: Failed to generate valid documentation content.');
-          setDocumentSections([]);
-          return;
+        // Validate the received documents array
+        if (!Array.isArray(documents) || documents.length === 0) {
+          console.warn('Generation success event received but no valid documents array was provided. Detail:', customEvent.detail);
+          addDebugLog('Warning: Invalid/Empty Documents Array Received', { detail: customEvent.detail });
+          setGeneratedMarkdown(''); // Ensure generatedMarkdown is cleared
+          
+          // Check if there's an error message to display
+          if (customEvent.detail.error) {
+            setError(customEvent.detail.error);
+            setWorkPhase('error');
+          } else {
+            // Create a fallback document with error information
+            const fallbackDocument = {
+              title: "Generation Failed - No Documents Generated",
+              content: `# No Documents Generated\n\nThe AI provider completed successfully but didn't return any valid documents. This could be due to:\n\n- Rate limiting\n- Token limits exceeded\n- Content filtering triggered\n- API connectivity issues\n\nPlease try again with different parameters or a different AI provider.`
+            };
+            setDocumentSections([fallbackDocument]);
+            setGeneratedMarkdown(fallbackDocument.content); // Set fallback markdown content
+            setActivePanel('results');
+            setWorkPhase('complete'); // Still mark as complete, but with a warning message
+          }
+        } else {
+           const validatedDocuments = documents.map((doc: any) => ({ 
+              title: doc.title || "Untitled Document",
+              content: doc.content || ""
+           }));
+           console.log(`Setting ${validatedDocuments.length} document sections from API response.`);
+           setDocumentSections(validatedDocuments);
+           
+           // Create a single markdown string from all document sections for download/copy
+           const combinedMarkdown = validatedDocuments
+              .map(doc => `# ${doc.title}\n\n${doc.content}`)
+              .join('\n\n---\n\n');
+           console.log(`Generated combined markdown content (${combinedMarkdown.length} chars)`);
+           setGeneratedMarkdown(combinedMarkdown);
+           
+           setActivePanel('results');
         }
         
-        // Update state directly with the data from the API response
-        // The API now provides the parsed sections, no need to re-parse here.
-        setDocumentSections(sections || []); // Use API sections or empty array
-        
-        // Set the full markdown content. If content is missing but sections exist, reconstruct it.
-        setGeneratedMarkdown(content || (sections || []).map((s: { title: string; content: string; }) => `# ${s.title}\n${s.content}`).join('\n\n'));
-        
-        // Update UI state
-        setActivePanel('results');
-        setWorkPhase('complete');
-        
-        // Store the actual provider/model used from the debug info
+        // Check and handle debug info correctly
         if (debug) {
           setActualProviderUsed(debug.provider);
           setActualModelUsed(debug.model);
           setDebugInfo(debug);
+          addDebugLog('Generation Complete', debug);
         }
-        
-        addDebugLog('Generation Complete (UI Update)', { 
-          contentLength: content?.length || 0,
-          sectionsCount: sections?.length || 0,
-          provider: debug?.provider,
-          model: debug?.model // Log the model as well
-        });
-      } catch (error) {
-        console.error('Error handling generation success event:', error);
-        addDebugLog('Generation Success Handler Error', { 
-          error: error instanceof Error ? error.message : String(error)
-        });
-        setWorkPhase('error');
-        // Provide error feedback in the UI
-        setGeneratedMarkdown('Error: An unexpected error occurred while processing the generated documentation.');
-        setDocumentSections([]);
+
+      } catch (error: any) {
+         console.error('Error processing generation:success event:', error);
+         addDebugLog('Error: Processing Success Event Failed', { error: error.message });
+         setWorkPhase('error');
+         setDocumentSections([]);
+         setGeneratedMarkdown(''); // Ensure generatedMarkdown is cleared on error
       }
     };
+
+    // Custom event listener
+    const eventName = 'cookfast:generationSuccess'; // Example custom event name
+    document.addEventListener(eventName, handleGenerationSuccess);
     
-    document.addEventListener('cookfast:generationSuccess', handleGenerationSuccess);
-    
-    return () => {
-      document.removeEventListener('cookfast:generationSuccess', handleGenerationSuccess);
+    // Status check listener (if still used)
+    const handleStatusUpdate = (e: Event) => {
+      // ... existing status update logic ...
     };
-  }, []);
+    window.addEventListener('generation:status', handleStatusUpdate); 
+
+    return () => {
+      document.removeEventListener(eventName, handleGenerationSuccess);
+      window.removeEventListener('generation:status', handleStatusUpdate);
+    };
+  // Ensure all dependencies used inside useEffect are listed, including state setters if necessary
+  }, [addDebugLog, setActualProviderUsed, setActualModelUsed, setDebugInfo]); 
 
   // --- Utility Functions --- //
   const formatLabel = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).replace(/ Doc$/, ' Document').trim();
@@ -1066,7 +1093,6 @@ export default function CookFastHome() {
       {activePanel === 'results' ? (
         <ResultsPanel
           documentSections={documentSections}
-          generatedMarkdown={generatedMarkdown}
           onDownload={handleDownload}
           onCopy={handleCopy}
           onDownloadJSON={downloadJSON}
@@ -1075,6 +1101,7 @@ export default function CookFastHome() {
           theme={theme}
           debugInfo={debugInfo}
           workPhase={workPhase}
+          isGenerating={isGenerating}
         />
       ) : activePanel === 'intro' || activePanel === 'details' || activePanel === 'docs' ? (
           <>
