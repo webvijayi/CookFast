@@ -3,14 +3,20 @@ import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Determine if running in Netlify environment
-const isNetlify = process.env.NETLIFY === 'true';
+// Determine if running in Netlify environment - check multiple indicators
+// The NETLIFY env var is the primary indicator, but also check deployment-specific paths
+const isNetlify = process.env.NETLIFY === 'true' || 
+                  process.env.NETLIFY_BLOBS_CONTEXT === 'production' || 
+                  process.env.NETLIFY_DEV === 'true' ||
+                  process.cwd().includes('/var/task');
+
+console.log(`[check-status] Environment detection: isNetlify=${isNetlify}, NETLIFY=${process.env.NETLIFY}, NETLIFY_BLOBS_CONTEXT=${process.env.NETLIFY_BLOBS_CONTEXT}, cwd=${process.cwd()}`);
 
 // Use consistent store name for all generation results - must match saveResult.ts
 const STORE_NAME = 'generationResults';
 
 // Determine the correct temporary directory path for local development only
-const tmpDir = path.join(process.cwd(), 'tmp');
+const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
 /**
  * Retrieves document generation result from Netlify Blobs in production
@@ -23,6 +29,8 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
   if (isNetlify) {
     // --- In production: Use Netlify Blobs ---
     try {
+      console.log(`[${requestId}] Using Netlify Blobs for retrieval (environment: ${process.env.NETLIFY_BLOBS_CONTEXT || 'unknown'})`);
+      
       // Create a site-wide store using standard getStore method
       const store = getStore(STORE_NAME);
       
@@ -35,7 +43,21 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
       
       if (!document) {
         console.log(`[${requestId}] No result found in Netlify Blobs store '${STORE_NAME}'`);
-        return null;
+        
+        // Try fallback to filesystem if Netlify Blobs returns nothing
+        try {
+          const filePath = path.join(tmpDir, `${requestId}.json`);
+          console.log(`[${requestId}] Trying filesystem fallback at ${filePath}`);
+          
+          const fileData = await fs.readFile(filePath, 'utf-8');
+          const document = JSON.parse(fileData);
+          console.log(`[${requestId}] Successfully retrieved result from filesystem fallback: ${filePath}`);
+          return document;
+        } catch (fallbackError: any) {
+          // If file not found or other error, no result exists
+          console.log(`[${requestId}] No result found in filesystem fallback either`);
+          return null;
+        }
       }
       
       console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs`);
@@ -61,7 +83,20 @@ async function getDocumentFromStore(requestId: string): Promise<any | null> {
         console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
       }
       
-      return null;
+      // Try filesystem fallback if Netlify Blobs fails
+      try {
+        const filePath = path.join(tmpDir, `${requestId}.json`);
+        console.log(`[${requestId}] Trying filesystem fallback after Netlify Blobs error at ${filePath}`);
+        
+        const fileData = await fs.readFile(filePath, 'utf-8');
+        const document = JSON.parse(fileData);
+        console.log(`[${requestId}] Successfully retrieved result from filesystem fallback: ${filePath}`);
+        return document;
+      } catch (fallbackError: any) {
+        // If file not found or other error, no result exists
+        console.log(`[${requestId}] No result found in filesystem fallback either`);
+        return null;
+      }
     }
   } else {
     // --- In local development: Use filesystem ---

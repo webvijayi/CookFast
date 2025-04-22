@@ -1067,3 +1067,25 @@
 - Ensured download, copy, and display functions work properly with Netlify Blobs
 
 This change improves reliability of document generation and storage in production environments by relying exclusively on Netlify Blobs for data persistence, while maintaining filesystem fallback for local development.
+
+## 2025-04-22: Fixed Netlify Blobs Environment Detection
+
+- Fixed environment detection logic in `src/utils/saveResult.ts` and `src/pages/api/check-status.ts`
+- Added multiple checks to properly identify Netlify environments (`NETLIFY`, `NETLIFY_BLOBS_CONTEXT`, `NETLIFY_DEV`, and path detection)
+- Added enhanced logging for environment detection to aid in debugging
+- Improved error handling for Netlify Blobs operations with filesystem fallback for resilience
+- Fixed temporary directory path to use `/tmp` instead of `/var/task/tmp` on Netlify
+- Added metadata with environment information to saved documents
+
+This update addresses an issue where the application was incorrectly identifying the Netlify environment as local development, causing it to use the filesystem instead of Netlify Blobs for document storage.
+
+## 2025-04-22: Netlify Blobs Implementation
+
+- Updated `src/utils/saveResult.ts` to properly use Netlify Blobs for production and filesystem only for local development
+- Updated `src/pages/api/check-status.ts` to enhance Netlify Blobs integration with better error handling
+- Updated `netlify.toml` to ensure NETLIFY_BLOBS_CONTEXT environment variable is set
+- Removed filesystem fallback for production environments
+- Improved debugging and logging for Netlify Blobs operations
+- Ensured download, copy, and display functions work properly with Netlify Blobs
+
+This change improves reliability of document generation and storage in production environments by relying exclusively on Netlify Blobs for data persistence, while maintaining filesystem fallback for local development.

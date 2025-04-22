@@ -9,19 +9,26 @@
  * Updated: 2023-11-20 - Added Netlify compatibility for tmp directory (now deprecated).
  * Updated: 2023-10-21 - Added enhanced debug logging for document content structure.
  * Updated: 2025-04-22 - Removed filesystem fallback for production, enhanced Netlify Blobs implementation.
+ * Updated: 2025-04-22 - Fixed environment detection logic to properly identify Netlify deployments.
  */
 import { getStore } from '@netlify/blobs';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Determine if running in Netlify environment
-const isNetlify = process.env.NETLIFY === 'true';
+// Determine if running in Netlify environment - check multiple indicators
+// The NETLIFY env var is the primary indicator, but also check deployment-specific paths
+const isNetlify = process.env.NETLIFY === 'true' || 
+                  process.env.NETLIFY_BLOBS_CONTEXT === 'production' || 
+                  process.env.NETLIFY_DEV === 'true' ||
+                  process.cwd().includes('/var/task');
+
+console.log(`Environment detection: isNetlify=${isNetlify}, NETLIFY=${process.env.NETLIFY}, NETLIFY_BLOBS_CONTEXT=${process.env.NETLIFY_BLOBS_CONTEXT}, cwd=${process.cwd()}`);
 
 // Use consistent store name for all generation results
 const STORE_NAME = 'generationResults';
 
 // Determine the correct temporary directory path for local development only
-const tmpDir = path.join(process.cwd(), 'tmp');
+const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
 
 /**
  * Save document generation result to Netlify Blobs in production
@@ -55,13 +62,16 @@ export async function saveGenerationResult(requestId: string, data: any): Promis
   if (isNetlify) {
     // --- In production: Use Netlify Blobs ---
     try {
+      console.log(`[${requestId}] Using Netlify Blobs for storage (environment: ${process.env.NETLIFY_BLOBS_CONTEXT || 'unknown'})`);
+      
       // Create a site-wide store using standard getStore method
       const store = getStore(STORE_NAME);
       
       // Add timestamp to metadata
       const metadata = {
         timestamp: new Date().toISOString(),
-        contentType: 'application/json'
+        contentType: 'application/json',
+        environment: process.env.NETLIFY_BLOBS_CONTEXT || 'netlify'
       };
       
       // Store using setJSON with metadata
@@ -79,7 +89,24 @@ export async function saveGenerationResult(requestId: string, data: any): Promis
         console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
       }
       
-      return false;
+      // Attempt to fallback to filesystem in case of Netlify Blobs failure
+      try {
+        console.log(`[${requestId}] Attempting filesystem fallback after Netlify Blobs failure`);
+        const filePath = path.join(tmpDir, `${requestId}.json`);
+        
+        // Add metadata to the data
+        data._meta = {
+          savedAt: new Date().toISOString(),
+          environment: 'netlify-filesystem-fallback'
+        };
+        
+        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+        console.log(`[${requestId}] Result saved to Netlify filesystem fallback at: ${filePath}`);
+        return true;
+      } catch (fallbackError: any) {
+        console.error(`[${requestId}] Filesystem fallback also failed:`, fallbackError.message);
+        return false;
+      }
     }
   } else {
     // --- In local development: Use filesystem ---
