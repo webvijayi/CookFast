@@ -1,10 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getStore } from '@netlify/blobs';
-import fs from 'fs/promises';
-import path from 'path';
+// Remove unused imports and local definitions
+// import { getStore } from '@netlify/blobs'; 
+// import fs from 'fs/promises';
+// import path from 'path';
 
-// Determine if running in Netlify environment - check multiple indicators
-// The NETLIFY env var is the primary indicator, but also check deployment-specific paths
+// Import the new centralized function
+import { getGenerationResult } from '../../utils/saveResult';
+
+// Re-enable isNetlify as it might be used elsewhere
 const isNetlify = process.env.NETLIFY === 'true' || 
                   process.env.NETLIFY_BLOBS_CONTEXT === 'production' || 
                   process.env.NETLIFY_DEV === 'true' ||
@@ -12,13 +15,24 @@ const isNetlify = process.env.NETLIFY === 'true' ||
 
 console.log(`[check-status] Environment detection: isNetlify=${isNetlify}, NETLIFY=${process.env.NETLIFY}, NETLIFY_BLOBS_CONTEXT=${process.env.NETLIFY_BLOBS_CONTEXT}, cwd=${process.cwd()}`);
 
-// Use consistent store name for all generation results - must match saveResult.ts
-const STORE_NAME = 'generationResults';
+// Remove local environment detection and path constants
+/*
+const isNetlify = process.env.NETLIFY === 'true' || 
+                  process.env.NETLIFY_BLOBS_CONTEXT === 'production' || 
+                  process.env.NETLIFY_DEV === 'true' ||
+                  process.cwd().includes('/var/task');
 
-// Determine the correct temporary directory path for local development only
-const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
+console.log(`[check-status] Environment detection: isNetlify=${isNetlify}, NETLIFY=${process.env.NETLIFY}, NETLIFY_BLOBS_CONTEXT=${process.env.NETLIFY_BLOBS_CONTEXT}, cwd=${process.cwd()}`);
 
-// Type for Netlify Blobs API options with consistency
+// Remove store name if no longer needed locally
+// const STORE_NAME = 'generationResults';
+
+// Remove tmpDir constant
+// const tmpDir = isNetlify ? '/tmp' : path.join(process.cwd(), 'tmp');
+*/
+
+// Remove local type definitions if no longer needed
+/*
 interface GetOptions {
   type?: 'json' | 'text' | 'arrayBuffer' | 'blob' | 'stream';
   consistency?: 'eventual' | 'strong';
@@ -27,164 +41,14 @@ interface GetOptions {
 interface GetMetadataOptions {
   consistency?: 'eventual' | 'strong';
 }
+*/
 
-/**
- * Retrieves document generation result from Netlify Blobs in production
- * or local file system during local development.
- * 
- * @param requestId - Unique identifier for this generation request
- * @returns Promise<any|null> - The stored document data or null if not found
- */
+// Remove the entire local getDocumentFromStore function
+/*
 async function getDocumentFromStore(requestId: string): Promise<any | null> {
-  if (isNetlify) {
-    // --- In production: Use Netlify Blobs ---
-    try {
-      console.log(`[${requestId}] Using Netlify Blobs for retrieval (environment: ${process.env.NETLIFY_BLOBS_CONTEXT || 'unknown'})`);
-      
-      // Debug Netlify Blobs configuration
-      console.log(`[${requestId}] Netlify Blobs Debug:`, {
-        NETLIFY: process.env.NETLIFY,
-        NETLIFY_BLOBS_CONTEXT: process.env.NETLIFY_BLOBS_CONTEXT,
-        NETLIFY_INTERNAL_SITE_ID: process.env.NETLIFY_INTERNAL_SITE_ID,
-        NETLIFY_FUNCTION_NAME: process.env.NETLIFY_FUNCTION_NAME,
-        NODE_VERSION: process.env.NODE_VERSION,
-        store: STORE_NAME,
-        key: requestId,
-        cwd: process.cwd(),
-        isNetlifyByLogic: isNetlify
-      });
-      
-      // Create a site-wide store using standard getStore method
-      const store = getStore(STORE_NAME);
-      
-      if (!store) {
-        console.error(`[${requestId}] Failed to create Netlify Blobs store`);
-        throw new Error('Failed to create Netlify Blobs store');
-      }
-      
-      // First, list all blobs to see what's in the store
-      try {
-        console.log(`[${requestId}] Listing all blobs in store '${STORE_NAME}' to verify content`);
-        const listResult = await store.list();
-        if (listResult.blobs.length > 0) {
-          console.log(`[${requestId}] Store contains ${listResult.blobs.length} blobs:`, 
-            listResult.blobs.map(b => b.key).join(', '));
-            
-          const hasRequestId = listResult.blobs.some(b => b.key === requestId);
-          if (hasRequestId) {
-            console.log(`[${requestId}] Found matching blob in store!`);
-          } else {
-            console.log(`[${requestId}] Blob with requested ID not found in store. Available blobs: ${listResult.blobs.map(b => b.key).join(', ')}`);
-          }
-        } else {
-          console.log(`[${requestId}] No blobs found in store '${STORE_NAME}'`);
-        }
-      } catch (listError) {
-        console.error(`[${requestId}] Error listing blobs:`, listError);
-      }
-      
-      // Check if blob exists before trying to get it
-      console.log(`[${requestId}] Checking metadata for key: ${requestId}`);
-      const metadataOptions: GetMetadataOptions = { consistency: 'strong' };
-      const metadata = await store.getMetadata(requestId, metadataOptions);
-      
-      if (metadata) {
-        console.log(`[${requestId}] Blob exists with metadata:`, metadata);
-      } else {
-        console.log(`[${requestId}] No metadata found for blob with key ${requestId}`);
-      }
-      
-      // Retrieve the document with JSON parsing and strong consistency
-      console.log(`[${requestId}] Attempting to retrieve blob with key: ${requestId}`);
-      const getOptions: GetOptions = { 
-        type: 'json',
-        // Use strong consistency to ensure we get the latest data
-        consistency: 'strong'
-      };
-      
-      const document = await store.get(requestId, getOptions);
-      
-      if (!document) {
-        console.log(`[${requestId}] No result found in Netlify Blobs store '${STORE_NAME}'`);
-        
-        // Try listing all blobs in the store again to see what's available
-        try {
-          console.log(`[${requestId}] Attempting second listing of all blobs in store '${STORE_NAME}'`);
-          const listResult = await store.list();
-          console.log(`[${requestId}] Available blobs in store (second check):`, 
-            listResult.blobs.map(b => b.key).join(', '));
-        } catch (listError) {
-          console.error(`[${requestId}] Error on second listing of blobs:`, listError);
-        }
-        
-        // Try fallback to filesystem if Netlify Blobs returns nothing
-        try {
-          const filePath = path.join(tmpDir, `${requestId}.json`);
-          console.log(`[${requestId}] Trying filesystem fallback at ${filePath}`);
-          
-          const fileData = await fs.readFile(filePath, 'utf-8');
-          const document = JSON.parse(fileData);
-          console.log(`[${requestId}] Successfully retrieved result from filesystem fallback: ${filePath}`);
-          return document;
-        } catch (fallbackError: any) {
-          // If file not found or other error, no result exists
-          console.log(`[${requestId}] No result found in filesystem fallback either: ${fallbackError.message || String(fallbackError)}`);
-          return null;
-        }
-      }
-      
-      console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs, type: ${typeof document}, has properties: ${document ? Object.keys(document).join(', ') : 'none'}`);
-      return document;
-    } catch (error: any) {
-      console.error(`[${requestId}] Error reading document from Netlify Blobs:`, error.message || String(error));
-      console.error(`[${requestId}] Stack trace:`, error.stack || 'No stack trace available');
-      
-      // Log additional diagnostic information
-      if (error.code || error.statusCode) {
-        console.error(`[${requestId}] Error code:`, error.code || error.statusCode);
-      }
-      
-      // Try filesystem fallback if Netlify Blobs fails
-      try {
-        const filePath = path.join(tmpDir, `${requestId}.json`);
-        console.log(`[${requestId}] Trying filesystem fallback after Netlify Blobs error at ${filePath}`);
-        
-        const fileData = await fs.readFile(filePath, 'utf-8');
-        const document = JSON.parse(fileData);
-        console.log(`[${requestId}] Successfully retrieved result from filesystem fallback: ${filePath}`);
-        return document;
-      } catch (fallbackError: any) {
-        // If file not found or other error, no result exists
-        console.log(`[${requestId}] No result found in filesystem fallback either: ${fallbackError.message || String(fallbackError)}`);
-        return null;
-      }
-    }
-  } else {
-    // --- In local development: Use filesystem ---
-    try {
-      const filePath = path.join(tmpDir, `${requestId}.json`);
-      console.log(`[${requestId}] Local development: Reading from filesystem at ${filePath}`);
-      
-      const fileData = await fs.readFile(filePath, 'utf-8');
-      const document = JSON.parse(fileData);
-      console.log(`[${requestId}] Successfully retrieved result from local file: ${filePath}`);
-      
-      if (document._meta) {
-        console.log(`[${requestId}] Local file saved at: ${document._meta.savedAt || 'unknown time'}`);
-      }
-      
-      return document;
-    } catch (error: any) {
-      // If file not found (ENOENT) or other error, assume it's processing or doesn't exist
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`[${requestId}] Error reading result from local file:`, error.message || String(error));
-      } else {
-        console.log(`[${requestId}] No result found in local tmp directory`);
-      }
-      return null;
-    }
-  }
+  // ... implementation ...
 }
+*/
 
 type StatusResponse = {
   status: 'processing' | 'completed' | 'failed' | 'unknown';
@@ -270,8 +134,8 @@ export default async function handler(
     // Log the request
     console.log(`[${requestId}] Processing status check request at ${new Date().toISOString()}`);
 
-    // Check for results using our document store utility
-    const document = await getDocumentFromStore(requestId);
+    // Use the imported function
+    const document = await getGenerationResult(requestId);
     
     // If we found a document, return it as completed/failed result
     if (document) {

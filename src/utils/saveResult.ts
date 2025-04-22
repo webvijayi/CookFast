@@ -23,6 +23,11 @@ interface SetOptions {
   metadata?: Record<string, unknown>;
 }
 
+interface GetOptions {
+  type?: 'json' | 'text' | 'arrayBuffer' | 'blob' | 'stream';
+  consistency?: 'eventual' | 'strong';
+}
+
 interface GetMetadataOptions {
   consistency?: 'eventual' | 'strong';
 }
@@ -283,5 +288,64 @@ async function saveToFilesystem(
       location: 'failed-to-save-filesystem',
       debug
     };
+  }
+}
+
+/**
+ * Retrieves generation result from Netlify Blobs in production or local file system for local dev.
+ * 
+ * @param requestId - Unique identifier for the generation request
+ * @returns Promise<any | null> - The stored generation result or null if not found or on error
+ */
+export async function getGenerationResult(requestId: string): Promise<any | null> {
+  console.log(`[${requestId}] Attempting to retrieve result. isNetlify=${isNetlify}, isNetlifyDev=${isNetlifyDev}`);
+
+  if (isNetlify) {
+    // --- Deployed Netlify: Use Netlify Blobs ---
+    console.log(`[${requestId}] Using Netlify Blobs for retrieval.`);
+    try {
+      const store = getStore(STORE_NAME);
+      console.log(`[${requestId}] Obtained store instance for '${STORE_NAME}'.`);
+      
+      const getOptions: GetOptions = { 
+        type: 'json',
+        consistency: 'strong' // Ensure latest data is read
+      };
+      
+      console.log(`[${requestId}] Attempting store.get with key: ${requestId}`);
+      const document = await store.get(requestId, getOptions);
+      
+      if (document) {
+        console.log(`[${requestId}] Successfully retrieved result from Netlify Blobs.`);
+        return document;
+      } else {
+        console.log(`[${requestId}] No result found in Netlify Blobs store '${STORE_NAME}' for key '${requestId}'.`);
+        return null;
+      }
+    } catch (error: unknown) {
+      const blobError = error instanceof Error ? error : new Error(String(error));
+      console.error(`[${requestId}] CRITICAL: Error retrieving result from Netlify Blobs: ${blobError.message}`, blobError.stack);
+      // Do not fallback to filesystem in deployed Netlify
+      return null;
+    }
+  } else {
+    // --- Local Development / Netlify Dev: Use Filesystem ---
+    const filePath = path.join(localTmpDir, `${requestId}.json`);
+    console.log(`[${requestId}] Local/Netlify Dev: Reading from filesystem at ${filePath}`);
+    try {
+      const fileData = await fs.readFile(filePath, 'utf-8');
+      const document = JSON.parse(fileData);
+      console.log(`[${requestId}] Successfully retrieved result from local file: ${filePath}`);
+      return document;
+    } catch (error: unknown) {
+      const fsError = error instanceof Error ? error : new Error(String(error));
+      // Log only if it's not a simple file-not-found error
+      if ((fsError as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error(`[${requestId}] Error reading result from local file ${filePath}: ${fsError.message}`, fsError.stack);
+      } else {
+        console.log(`[${requestId}] Result file not found locally: ${filePath}`);
+      }
+      return null;
+    }
   }
 }
