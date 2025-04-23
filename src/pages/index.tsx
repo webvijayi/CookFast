@@ -352,6 +352,14 @@ const ResultsPanel = ({
           </Button>
         </div>
 
+        {/* Display Token Usage */}
+        {debugInfo?.tokensUsed && (
+          <div className="text-center text-xs text-muted-foreground mt-4">
+            Tokens Used: Input: {debugInfo.tokensUsed.input} | Output: {debugInfo.tokensUsed.output} | Total: {debugInfo.tokensUsed.total} 
+            (Provider: {debugInfo.provider} | Model: {debugInfo.model})
+          </div>
+        )}
+
         {hasGeneratedDocs ? (
           <div className="w-full max-w-none">
             <DocumentTabs
@@ -1148,8 +1156,10 @@ export default function CookFastHome() {
     <Fragment>
       <Head>
         <title>🍳🚀 CookFast | AI-Powered Project Documentation Generator - Free & Open Source</title>
-        <meta name="description" content="🔥 Generate comprehensive project docs in seconds! CookFast is a free, open-source tool that transforms your project ideas into detailed documentation using AI. Supports OpenAI, Anthropic, and Gemini. Start cooking up your project faster! 📝✨" />
-        <meta name="keywords" content="AI documentation generator, free documentation tool, project planning, technical documentation, OpenAI, Anthropic, Gemini, developer tool, markdown generator, project templates, open-source documentation, CookFast" />
+        {/* Updated SEO Description */}
+        <meta name="description" content="🍳🚀 CookFast is a free AI tool that writes essential product documents (like Requirements Docs & Application Flows) from your idea, helping you start coding faster. Generate docs for Web Apps, Mobile Apps & more!" />
+        {/* Updated SEO Keywords */}
+        <meta name="keywords" content="AI project documentation generator, ai product documents for coding,vibe coding requirements document, ai application flow generator, ai project planning tool, free ai developer documentation tool, ai web app docs generator,ai mobile app docs generator, product technical documentation generator,CookFast" />
         <meta name="author" content="Web Vijayi" />
         <meta name="theme-color" content="#FB7A09" />
         <link rel="preconnect" href={SITE_URL} />

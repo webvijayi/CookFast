@@ -1,23 +1,5 @@
-declare module 'mermaid' {
-  interface MermaidConfig {
-    startOnLoad?: boolean;
-    theme?: string;
-    securityLevel?: string;
-    [key: string]: unknown;
-  }
+// src/types/mermaid.d.ts
+// Timestamp: 2025-04-24T04:25:00Z - Added declaration to suppress TS error for mermaid ESM bundle import.
 
-  interface RunOptions {
-    nodes?: HTMLElement[];
-    [key: string]: unknown;
-  }
-
-  export function initialize(config: MermaidConfig): void;
-  export function run(options?: RunOptions): Promise<unknown>;
-  
-  const mermaid = {
-    initialize,
-    run
-  };
-  
-  export default mermaid;
-} 
+// Suppress TypeScript error for missing declaration file for the specific ESM bundle path
+declare module 'mermaid/dist/mermaid.esm.min.mjs';
