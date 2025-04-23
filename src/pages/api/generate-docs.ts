@@ -317,7 +317,19 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
                  `   - Cover key user flows based on project features\n` +
                  `   - Show interactions between frontend and backend if both exist\n` +
                  `   - Add helpful labels, annotations, and captions\n` +
-                 `   - Use proper Mermaid syntax with no mistakes\n` +
+                 `   - Use proper Mermaid syntax with no mistakes\n\n` +
+                 `6. **Strict Syntax Rules & Common Errors to AVOID:**\n` + // Moved this block inside the string
+                 `   - **NO Invalid Link Text:** NEVER write \\\`C -->|Text|"D"\\\`. Correct: \\\`C -->|Text| D\\\` (Space after \\\`|\\\`, no quotes around \\\`D\\\`).\n` + // Escaped backticks
+                 `   - **NO Invalid Arrows:** NEVER write \\\`--> >\\\`. Correct: \\\`-->\\\`.\n` + // Escaped backticks
+                 `   - **NO Missing Newlines:** NEVER write \\\`NodeA[Label]NodeB\\\`. Correct: \\\`NodeA[Label]\\\\nNodeB\\\` or \\\`NodeA[Label] --> NodeB\\\`.\n` + // Escaped backticks
+                 `   - **NO Invalid Node Links:** NEVER write \\\`NodeA("Text")] --> NodeB\\\`. Correct: \\\`NodeA("Text") --> NodeB\\\` (Ensure space after node definition).\n` + // Escaped backticks
+                 `   - **QUOTE LABELS WITH SPECIAL CHARS:** Node labels containing spaces, parentheses \`()\`, brackets \`[]\`, braces \`{}\`, colons \`:\`, semicolons \`;\`, quotes \`"\`, or other special characters MUST be enclosed in double quotes \\\`""\\\`. \n` + // Escaped backticks
+                 `   - **ESCAPE INTERNAL QUOTES:** If a quoted label itself contains double quotes, escape them using the HTML entity \\\`#quot;\\\`. Example: \\\`A["Label with #quot;internal quotes#quot;"]\\\` is correct. \\\`A["Label with "internal quotes""]\\\` is WRONG.\n` + // Escaped backticks
+                 `   - **EXAMPLE (Parentheses):** \\\`C["Navigates to Service Category Page (e.g., Web Development)"]\\\` is correct. \\\`C[Navigates to Service Category Page (e.g., Web Development)]\\\` is WRONG.\n` + // Escaped backticks
+                 `   - **EXAMPLE (Edge Label):** \\\`B -->|"Failure (e.g., Email Service Down)"| D\\\` is correct. \\\`B -->|Failure (e.g., Email Service Down)| D\\\` is WRONG if quotes are needed.\n` + // Escaped backticks
+                 `   - **NO COMMENTS:** NEVER include comments (like \`//\` or lines starting with \`%%\` unless it's a specific directive) inside the \\\`\\\`\\\`mermaid code blocks. Comments cause parsing errors.\n` + // Escaped backticks
+                 `   - **Sequence Diagram Participants:** Ensure all interacting entities in sequence diagrams are declared with \`participant\` or \`actor\` keywords BEFORE they are used in messages.\n` +
+                 `   - **Sequence Diagram Messages:** Ensure messages have a colon \`:\` separating the participants/arrow from the message text.\n` +
                  `</mermaid_diagram_instructions>\n\n`;
   }
 
@@ -799,19 +811,24 @@ export default async function handler(
       
       // Try to parse the JSON response from the AI
       let parsedResponse: StructuredGenerationResponse;
+      let cleanedResponse = result.responseText.trim(); // Trim whitespace first
+
+      // Remove potential markdown code fences (```json ... ``` or ``` ... ```)
+      cleanedResponse = cleanedResponse.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
+      
+      console.log(`[${requestId}] Cleaned response text (length: ${cleanedResponse.length}): ${cleanedResponse.substring(0, 200)}...`); // Log cleaned response
+
       try {
-        parsedResponse = JSON.parse(result.responseText);
+        // Attempt to parse the cleaned response
+        parsedResponse = JSON.parse(cleanedResponse);
+        console.log(`[${requestId}] Successfully parsed cleaned JSON response`);
       } catch (jsonError: any) {
-        console.error(`[${requestId}] Failed to parse AI response: ${jsonError.message}`);
-        // Try to clean up the response if it might be wrapped in markdown code blocks
-        const cleanedResponse = result.responseText.replace(/^```json\s*([\s\S]*?)\s*```$/g, '$1').trim();
-        try {
-          parsedResponse = JSON.parse(cleanedResponse);
-          console.log(`[${requestId}] Successfully parsed JSON after cleaning markdown code blocks`);
-        } catch (secondError) {
-                // If still failing, throw an error
-          throw jsonError;
-        }
+        // Log the error from parsing the cleaned response
+        console.error(`[${requestId}] Failed to parse cleaned AI response: ${jsonError.message}`);
+        // Log the cleaned response that failed parsing for debugging
+        console.error(`[${requestId}] Cleaned response that failed parsing:`, cleanedResponse);
+        // If parsing the cleaned response failed, throw the original error to indicate the core issue
+        throw new Error(`Failed to parse AI response as JSON, even after cleaning. Original error: ${jsonError.message}`);
       }
       
       // Convert the response to documents array format expected by the client
