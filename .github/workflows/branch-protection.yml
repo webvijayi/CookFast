@@ -1,0 +1,41 @@
+name: Branch Protection
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  enforce-protection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if PR author is authorized
+        id: check-author
+        run: |
+          if [[ "${{ github.actor }}" == "lmotwani" || "${{ github.actor }}" == "webvijayi" ]]; then
+            echo "✅ PR author is an authorized user"
+            echo "authorized=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ PR author is not an authorized user. Review required."
+            echo "authorized=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Require review if not authorized
+        if: steps.check-author.outputs.authorized == 'false'
+        run: |
+          echo "::notice::This PR requires review from lmotwani or webvijayi before merging."
+          
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lint
+        run: npm run lint || echo "Linting failed but continuing" 

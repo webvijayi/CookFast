@@ -1,0 +1,12 @@
+# CODEOWNERS file for CookFast repository
+# Owners listed below will be automatically requested for review on pull requests
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# These owners will be the default owners for everything in the repo
+* @lmotwani @webvijayi
+
+# Only lmotwani and webvijayi can approve changes to critical files
+/src/ @lmotwani @webvijayi
+/.next.config.js @lmotwani @webvijayi
+/package.json @lmotwani @webvijayi
+/netlify.toml @lmotwani @webvijayi 
