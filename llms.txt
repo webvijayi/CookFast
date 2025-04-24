@@ -1,0 +1,65 @@
+# CookFast
+
+> CookFast is an AI-powered tool that automatically generates comprehensive project documentation, templates, and development guides based on your project details.
+
+CookFast helps developers quickly convert ideas into structured plans, reducing initial project setup time significantly while supporting multiple AI providers (Google Gemini, OpenAI, and Anthropic). The tool leverages large context windows of the latest AI models, including OpenAI GPT-4.1 (1M tokens), Gemini 2.5 Pro (1M+ tokens), and Claude 3.7 Sonnet (200K tokens).
+
+## Supported Project Types
+CookFast generates tailored documentation for various project types:
+
+- **Web Applications**: Full-stack web apps with frontend/backend architecture
+- **Websites**: Content-focused sites with SEO and performance optimization
+- **Mobile Apps**: Native or cross-platform mobile application development
+- **API Services**: RESTful or GraphQL API design and implementation
+- **Libraries/Packages**: Reusable code modules and development libraries
+- **Desktop Applications**: Native desktop software for Windows, macOS, or Linux
+
+## Document Types
+CookFast can generate the following planning documents:
+
+- **Project Requirements Document**: Comprehensive breakdown of functional and non-functional requirements, user stories, acceptance criteria, and project scope
+- **Frontend Guidelines**: Component architecture, state management strategies, styling conventions, responsive design principles, and accessibility standards
+- **Backend Structure Proposal**: API design, database schema, authentication flows, middleware configuration, and service architecture
+- **Application Flow Diagram**: Visual Mermaid diagrams showing user journeys, data flows, and system interactions
+- **Tech Stack Documentation**: Detailed analysis of selected technologies, libraries, frameworks with justifications and alternatives
+- **API Documentation**: Endpoint specifications, request/response formats, authentication methods, and error handling
+- **File Structure Proposal**: Recommended project organization with directories and key files explained
+- **User Interface Design**: Design system guidelines, component library recommendations, and UI patterns
+- **Deployment Guide**: Environment setup, CI/CD pipeline configuration, and hosting recommendations
+
+## AI Provider Integration
+CookFast seamlessly integrates with multiple AI providers:
+
+- **OpenAI**: Uses GPT-4.1 with 1,000,000 token context window (32,768 output tokens)
+- **Google**: Leverages Gemini 2.5 Pro with 1,048,576 token context window (65,536 output tokens)
+- **Anthropic**: Employs Claude 3.7 Sonnet with 200,000 token context window (64,000 output tokens)
+
+## Documentation
+- [Project Overview](https://github.com/webvijayi/CookFast#-cookfast-ai-powered-project-planning-documents-): Features and capabilities
+- [Installation Guide](https://github.com/webvijayi/CookFast#installation--running-locally): Setup and local development
+- [API Documentation](https://github.com/webvijayi/CookFast/blob/main/docs/api-documentation.md): API endpoints and usage
+
+## Tutorials
+- [Getting Started](https://github.com/webvijayi/CookFast#-how-to-use): Basic usage guide
+- [Using Different AI Providers](https://github.com/webvijayi/CookFast#1-which-ai-providers-does-cookfast-support): Configuring AI models
+- [Document Generation Examples](https://github.com/webvijayi/CookFast#-features): Sample outputs and use cases
+
+## Document Type & Project Type Compatibility
+
+| Document Type               | Web Apps | Websites | Mobile Apps | API Services | Libraries | Desktop Apps |
+|-----------------------------|:--------:|:--------:|:-----------:|:------------:|:---------:|:------------:|
+| Project Requirements        |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+| Frontend Guidelines         |    ✅    |    ✅    |     ✅      |      ❌      |     ❌    |      ✅      |
+| Backend Structure           |    ✅    |    ✅    |     ✅      |      ✅      |     ❌    |      ✅      |
+| Application Flow Diagram    |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+| Tech Stack Documentation    |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+| API Documentation           |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+| File Structure Proposal     |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+| User Interface Design       |    ✅    |    ✅    |     ✅      |      ❌      |     ❌    |      ✅      |
+| Deployment Guide            |    ✅    |    ✅    |     ✅      |      ✅      |     ✅    |      ✅      |
+
+## Optional
+- [Contributing Guidelines](https://github.com/webvijayi/CookFast/blob/main/.github/CONTRIBUTING.md): How to contribute
+- [Security Policy](https://github.com/webvijayi/CookFast/blob/main/SECURITY.md): Reporting vulnerabilities
+- [API Key Setup](https://github.com/webvijayi/CookFast#6-do-i-need-to-provide-my-own-api-keys): Configuring provider keys
+- [Deployment Guide](https://github.com/webvijayi/CookFast#-deployment): Deploying to Netlify or Vercel
