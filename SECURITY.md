@@ -10,7 +10,7 @@ If you believe you've found a security vulnerability in CookFast, please follow 
 
 1. **Use GitHub's Private Vulnerability Reporting**: Go to the "Security" tab on our GitHub repository and click on "Report a vulnerability"
 
-2. **Alternatively, contact maintainers directly**: If needed, you can email us at [INSERT EMAIL ADDRESS HERE] with the subject line "CookFast Security Vulnerability"
+2. **Alternatively, contact maintainers directly**: If needed, you can email us at Care[at]webvijayi.com and me[at]lokeshmotwani.com with the subject line "CookFast Security Vulnerability"
 
 ### What to Include in Your Report
 
@@ -25,7 +25,7 @@ Please include the following details in your vulnerability report:
 
 We commit to:
 
-- Responding to security reports within 48 hours
+- Responding to security reports within 7 working days
 - Keeping reporters updated as we address the issue
 - Giving proper credit to security researchers who help us improve our security (unless they prefer to remain anonymous)
 - Not taking legal action against those who report vulnerabilities in good faith
