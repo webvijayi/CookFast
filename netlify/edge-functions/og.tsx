@@ -10,8 +10,8 @@ const REACT_VERSION = "18.2.0";
 import React from 'https://esm.sh/react@18.2.0?dts';
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
-// Define the absolute URL for the fallback image
-const FALLBACK_IMAGE_URL = "https://cook-fast.webvijayi.com/cookfast%20og.png";
+// Define the URL for the fallback image - using a local file instead of external URL
+const FALLBACK_IMAGE_URL = "/cookfast og.png";
 
 // Cache settings
 const CACHE_CONTROL_HEADER = "public, max-age=3600, s-maxage=86400"; // 1 hour browser cache, 24 hour CDN cache
@@ -169,8 +169,10 @@ export default async function handler(req: Request) {
     console.error(`Error generating OG image: ${e.message}. Attempting to serve fallback.`);
     
     try {
-      // Fetch the static fallback image
-      const fallbackResponse = await fetch(FALLBACK_IMAGE_URL);
+      // Get the origin from the request URL to build the absolute fallback URL
+      const { origin } = new URL(req.url);
+      // Fetch the static fallback image from our own domain
+      const fallbackResponse = await fetch(`${origin}${FALLBACK_IMAGE_URL}`);
 
       if (!fallbackResponse.ok) {
         // Log if fallback fetch fails

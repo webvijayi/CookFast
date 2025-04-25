@@ -103,21 +103,32 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
         let diagramText = el.textContent || '';
         
         try {
-          // **Minimal Sanitization + Fixes**
+          // **Enhanced Sanitization + Fixes**
           diagramText = diagramText.replace(/\r\n|\r/g, '\n');
           diagramText = diagramText.split('\n').map(line => line.trim()).join('\n').trim();
           diagramText = diagramText.replace(/^```mermaid\s*/, '').replace(/\s*```$/, '').trim();
           diagramText = diagramText.replace(/\n{2,}/g, '\n'); 
           diagramText = diagramText.replace(/^\s*\/\/.*$/gm, ''); // Remove comments
           diagramText = diagramText.replace(/^flowchart/gm, 'graph'); // Use graph alias
+          
+          // Fix pipe character syntax in edge labels by adding spaces
+          // This addresses the common error with edge labels like: A -->|Label|B
+          diagramText = diagramText.replace(/(\|)([^\s|])/g, '$1 $2'); // Add space after opening pipe
+          diagramText = diagramText.replace(/([^\s|])(\|)/g, '$1 $2'); // Add space before closing pipe
+          
           // Fix labels with parens: C[...] -> C["..."]
           diagramText = diagramText.replace(/(\[)([^"\]]*\([^)]*\)[^"\]]*)(\])/g, (match, open, content, close) => {
              return `${open}"${content.replace(/"/g, '#quot;')}"${close}`;
           });
-           // Ensure space after edge label closing pipe: |Text|Node -> |Text| Node
+          
+          // Ensure space after edge label closing pipe: |Text|Node -> |Text| Node
           diagramText = diagramText.replace(/(\|)(\S)/g, '$1 $2'); 
+          
           // Replace semicolon immediately after node definition with newline
           diagramText = diagramText.replace(/([\)\]\}<>]);/g, '$1\n');
+
+          // Fix common syntax issues with edge labels
+          diagramText = diagramText.replace(/(-->|==>|~~>|-.->|===>)(\|)([^|]+)(\|)([^\s])/g, '$1$2$3$4 $5');
 
           console.log(`[Mermaid] Prepared code for diagram ${i}:\n${diagramText}`); 
 
@@ -239,13 +250,110 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
 
       // For Mermaid, render the raw code inside <pre><code> for initAndRenderMermaid to find
       if (language === 'mermaid') {
-         return (
-           <pre> 
-             <code className={className || 'language-mermaid'} {...rest}>
-               {String(children).trim()}
-             </code>
-           </pre>
-         );
+        let mermaidContent = String(children).trim();
+        
+        // Try to normalize content to avoid common parsing errors
+        // This is in addition to what initAndRenderMermaid does, to make it more robust
+        try {
+          // If content doesn't start with a valid diagram type, attempt to detect and fix
+          const validDiagramTypes = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram', 'journey', 'gantt', 'pie'];
+          const firstLine = mermaidContent.split('\n')[0].trim();
+          
+          if (!validDiagramTypes.some(type => firstLine.startsWith(type))) {
+            // If no diagram type is detected at start, assume flowchart/graph
+            if (mermaidContent.includes('-->') || mermaidContent.includes('---')) {
+              mermaidContent = 'graph TD;\n' + mermaidContent;
+            }
+          }
+          
+          // Replace unsupported flowchart with graph
+          mermaidContent = mermaidContent.replace(/^flowchart\s/gm, 'graph ');
+          
+          // Add proper diagram terminator if missing
+          if (!mermaidContent.includes(';')) {
+            mermaidContent = mermaidContent + ';';
+          }
+          
+          // Fix common syntax issues:
+          
+          // 1. Ensure node IDs are properly defined before edge definitions
+          // Matches patterns like 'NodeA --> NodeB' where NodeA or NodeB might not be defined
+          const nodeIds = new Set();
+          const nodeDefRegex = /\b([A-Za-z0-9_-]+)(\[|\(|\{|\>)/g;
+          let match;
+          while ((match = nodeDefRegex.exec(mermaidContent)) !== null) {
+            nodeIds.add(match[1]);
+          }
+          
+          // 2. Fix edge connections with undefined nodes
+          // Look for edges where nodes aren't explicitly defined
+          const edgeRegex = /\b([A-Za-z0-9_-]+)\s*(-->|---|\.->.|\==>|-.->)\s*([A-Za-z0-9_-]+)\b(?!\s*[[({<])/g;
+          mermaidContent = mermaidContent.replace(edgeRegex, (match, source, edge, target) => {
+            // If the source or target nodes aren't defined elsewhere, define them
+            let result = match;
+            if (!nodeIds.has(source)) {
+              result = `${source}[${source}] ${edge} ${target}`;
+              nodeIds.add(source);
+            }
+            if (!nodeIds.has(target)) {
+              result = `${source} ${edge} ${target}[${target}]`;
+              nodeIds.add(target);
+            }
+            return result;
+          });
+          
+          // 3. Fix malformed node definitions with spaces in brackets
+          mermaidContent = mermaidContent.replace(/(\w+)\s*\[\s*([^\]]+)\s*\]/g, '$1["$2"]');
+          
+          // 4. Fix incomplete node definitions (missing closing brackets)
+          const lines = mermaidContent.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // Check for unbalanced brackets
+            const openBrackets = (line.match(/\[/g) || []).length;
+            const closeBrackets = (line.match(/\]/g) || []).length;
+            if (openBrackets > closeBrackets) {
+              lines[i] = line + ']'.repeat(openBrackets - closeBrackets);
+            }
+            
+            const openCurly = (line.match(/\{/g) || []).length;
+            const closeCurly = (line.match(/\}/g) || []).length;
+            if (openCurly > closeCurly) {
+              lines[i] = line + '}'.repeat(openCurly - closeCurly);
+            }
+            
+            const openParen = (line.match(/\(/g) || []).length;
+            const closeParen = (line.match(/\)/g) || []).length;
+            if (openParen > closeParen) {
+              lines[i] = line + ')'.repeat(openParen - closeParen);
+            }
+          }
+          mermaidContent = lines.join('\n');
+          
+          // 5. Ensure proper spacing around edge definitions
+          mermaidContent = mermaidContent.replace(/(\w+|\])(\.|-->|---|===>|-.->|==>)(\w+|\[)/g, '$1 $2 $3');
+          
+          // 6. Ensure nodes with edge labels have proper syntax
+          // Fix common edge label issues like A-->|text|B with missing spaces
+          mermaidContent = mermaidContent.replace(/(\w+|\])\s*(-->|---|===>|-.->)\s*\|([^|]+)\|\s*(\w+|\[)/g, 
+            (match, source, arrow, label, target) => {
+              return `${source} ${arrow}|${label.trim()}| ${target}`;
+            }
+          );
+          
+          console.log('[Mermaid] Preprocessed content:', mermaidContent);
+        } catch (e) {
+          console.warn('[Mermaid] Error during content normalization:', e);
+          // Continue with original content if preprocessing fails
+        }
+        
+        return (
+          <pre> 
+            <code className={className || 'language-mermaid'} {...rest}>
+              {mermaidContent}
+            </code>
+          </pre>
+        );
       }
       
       // Regular Code Block

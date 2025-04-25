@@ -5,7 +5,7 @@
   command = "npm run build"
   
   # Explicitly set the publish directory for Next.js builds
-  publish = ".next"
+  publish = "public"
   
   # Directory containing serverless functions (API routes)
   # Netlify's Next.js runtime automatically detects functions in pages/api.
@@ -27,6 +27,7 @@
   directory = "src/pages/api"
   node_bundler = "esbuild"
   # Note: Node.js version is set via environment variable in Netlify UI
+  included_files = ["public/**/*"] # Include public directory for static assets
 
 # Configure generate-docs as a background function
 [functions."generate-docs"]
@@ -34,7 +35,7 @@
   background = true
   timeout = "900" # 15 minutes for background functions
   memory = 1024 # 1GB memory
-  included_files = ["!node_modules/**/*"] # Exclude node_modules to reduce bundle size
+  included_files = ["!node_modules/**/*", "public/**/*"] # Exclude node_modules to reduce bundle size, include public directory
 
 # Environment variables configuration
 [build.environment]
@@ -47,10 +48,12 @@
 [[edge_functions]]
   function = "og"
   path = "/api/og"
+  # Include static assets and fonts in edge function bundle
+  included_files = ["public/**/*"]
 
 # Fallback rules for OG images if Edge Function fails
 [[redirects]]
   from = "/api/og-fallback"
-  to = "/cookfast-og-fallback.png"
+  to = "/cookfast og.png" 
   status = 200
   force = true

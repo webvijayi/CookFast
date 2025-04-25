@@ -62,4 +62,4 @@ CookFast seamlessly integrates with multiple AI providers:
 - [Contributing Guidelines](https://github.com/webvijayi/CookFast/blob/main/.github/CONTRIBUTING.md): How to contribute
 - [Security Policy](https://github.com/webvijayi/CookFast/blob/main/SECURITY.md): Reporting vulnerabilities
 - [API Key Setup](https://github.com/webvijayi/CookFast#6-do-i-need-to-provide-my-own-api-keys): Configuring provider keys
-- [Deployment Guide](https://github.com/webvijayi/CookFast#-deployment): Deploying to Netlify or Vercel
+- [Deployment Guide](https://github.com/webvijayi/CookFast#-deployment): Deploying to Netlify or Vercel 
