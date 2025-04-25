@@ -2,10 +2,12 @@
 
 [build]
   # Command to build the Next.js application
-  command = "npm run build"
+  command = "npm run build && cp -r public/* .next/static/"
   
   # Explicitly set the publish directory for Next.js builds
-  publish = "public"
+  # Next.js uses .next for its build, but we need to make sure
+  # static assets from public are also included
+  publish = ".next"
   
   # Directory containing serverless functions (API routes)
   # Netlify's Next.js runtime automatically detects functions in pages/api.
