@@ -361,6 +361,24 @@ export default function EnhancedForm({
           <label htmlFor="apiKey" className="block text-sm font-medium">
             Your {selectedProvider.toUpperCase()} API Key <span className="text-red-500">*</span>
           </label>
+          <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+            Get your API key from: {' '}
+            {selectedProvider === 'openai' && (
+              <a href="https://platform.openai.com/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                OpenAI API
+              </a>
+            )}
+            {selectedProvider === 'anthropic' && (
+              <a href="https://www.anthropic.com/product" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                Anthropic API
+              </a>
+            )}
+            {selectedProvider === 'gemini' && (
+              <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">
+                Google Gemini API
+              </a>
+            )}
+          </div>
           <div className="flex flex-col sm:flex-row">
             <input
               type="password"

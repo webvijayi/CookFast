@@ -1,5 +1,9 @@
 # 🍳🚀 CookFast: AI-Powered Project Planning Documents 🛠️
 
+[![License](https://img.shields.io/github/license/webvijayi/cookfast)](https://github.com/webvijayi/cookfast/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/webvijayi/cookfast)](https://github.com/webvijayi/cookfast/stargazers)
+[![Twitter Follow](https://img.shields.io/twitter/follow/webvijayi?style=social)](https://twitter.com/webvijayi)
+
 CookFast is an AI-powered tool that automatically generates comprehensive project documentation, templates, and development guides based on your project details. It helps developers quickly convert ideas into structured plans, reducing the initial project setup time significantly.
 
 ## ✨ Features
@@ -68,7 +72,10 @@ No. API keys are validated client-side and never stored by CookFast. They are se
 
 *   Node.js (Version 20 or later recommended)
 *   npm, yarn, or pnpm
-*   An API key for at least one of the supported AI providers (Gemini, OpenAI, Anthropic).
+*   An API key for at least one of the supported AI providers:
+    * [OpenAI API](https://platform.openai.com/)
+    * [Anthropic API](https://www.anthropic.com/product)
+    * [Google Gemini API](https://ai.google.dev/)
 
 ### Installation & Running Locally
 
