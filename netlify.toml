@@ -50,8 +50,8 @@
 [[edge_functions]]
   function = "og"
   path = "/api/og"
-  # Include static assets and fonts in edge function bundle
-  included_files = ["public/**/*"]
+  # The 'included_files' property is not valid here and needs to be handled differently
+  # for edge functions, typically by ensuring assets are correctly placed during build.
 
 # Fallback rules for OG images if Edge Function fails
 [[redirects]]
