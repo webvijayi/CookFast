@@ -1,8 +1,8 @@
 # Netlify build configuration for a Next.js project
 
 [build]
-  # Command to build the Next.js application
-  command = "npm run build && cp -r public/* .next/static/"
+  # Command to build the Next.js application and ensure static assets are properly copied
+  command = "npm run build && cp -r public/* .next/static/ && cp public/cookfast-og.png .next/"
   
   # Explicitly set the publish directory for Next.js builds
   # Next.js uses .next for its build, but we need to make sure
@@ -15,9 +15,9 @@
 
 [dev]
   # Optional: Settings for local development using Netlify Dev CLI
-  # command = "npm run dev" # Command to start your dev server
-  # port = 3000             # Port your dev server runs on
-  # publish = ".next"       # Dev server build directory (if applicable)
+  command = "npm run dev" # Command to start your dev server
+  port = 3000             # Port your dev server runs on
+  publish = ".next"       # Dev server build directory (if applicable)
 
 # Plugin for essential Next.js features on Netlify
 [[plugins]]
@@ -50,12 +50,29 @@
 [[edge_functions]]
   function = "og"
   path = "/api/og"
-  # The 'included_files' property is not valid here and needs to be handled differently
-  # for edge functions, typically by ensuring assets are correctly placed during build.
+
+# Handle OPTIONS requests for the OG endpoint (needed for some crawlers)
+[[headers]]
+  for = "/api/og"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, OPTIONS"
+    Access-Control-Allow-Headers = "Accept-Encoding, Content-Type"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Content-Type = "image/png"
+    Cache-Control = "public, max-age=300, s-maxage=3600"
 
 # Fallback rules for OG images if Edge Function fails
 [[redirects]]
   from = "/api/og-fallback"
-  to = "/cookfast og.png" 
+  to = "/cookfast-og.png" 
   status = 200
   force = true
+
+# Ensure proper handling of OpenGraph image requests
+[[headers]]
+  for = "/cookfast-og.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, s-maxage=31536000"
+    Content-Type = "image/png"

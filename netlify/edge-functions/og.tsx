@@ -11,10 +11,11 @@ import React from 'https://esm.sh/react@18.2.0?dts';
 import { ImageResponse } from "https://deno.land/x/og_edge/mod.ts";
 
 // Define the URL for the fallback image - using a local file instead of external URL
-const FALLBACK_IMAGE_URL = "/cookfast og.png";
+// Removed space from filename for better URL compatibility
+const FALLBACK_IMAGE_URL = "/cookfast-og.png";
 
-// Cache settings
-const CACHE_CONTROL_HEADER = "public, max-age=3600, s-maxage=86400"; // 1 hour browser cache, 24 hour CDN cache
+// Cache settings - use shorter cache to help with debugging
+const CACHE_CONTROL_HEADER = "public, max-age=300, s-maxage=3600"; // 5 min browser cache, 1 hour CDN cache
 
 /**
  * Netlify Edge Function handler for generating OpenGraph images
@@ -24,6 +25,10 @@ const CACHE_CONTROL_HEADER = "public, max-age=3600, s-maxage=86400"; // 1 hour b
  */
 export default async function handler(req: Request) {
   try {
+    // Check for Accept-Encoding header to determine if client supports compression
+    const acceptEncoding = req.headers.get('Accept-Encoding') || '';
+    const supportsCompression = acceptEncoding.includes('gzip') || acceptEncoding.includes('deflate');
+    
     const url = new URL(req.url);
     
     // Get optional customization parameters
@@ -34,7 +39,6 @@ export default async function handler(req: Request) {
     // Define colors based on theme
     const bgColor = theme === "dark" ? "#09090B" : "#FFFFFF";
     const textColor = theme === "dark" ? "#FFFFFF" : "#09090B";
-    const accentColor = "#FB7A09"; // Orange accent color
     
     // Generate the dynamic image with optimized response headers
     const imageResponse = new ImageResponse(
@@ -56,7 +60,7 @@ export default async function handler(req: Request) {
             overflow: "hidden",
           }}
         >
-          {/* Gradient Background */}
+          {/* Simple Background */}
           <div
             style={{
               position: "absolute",
@@ -72,22 +76,7 @@ export default async function handler(req: Request) {
             }}
           />
           
-          {/* Subtle Grid Pattern */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 
-                "radial-gradient(circle, rgba(251,122,9,0.1) 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
-              zIndex: 1,
-            }}
-          />
-          
-          {/* Content Container */}
+          {/* Content Container - Simplified for better compatibility */}
           <div
             style={{
               display: "flex",
@@ -100,8 +89,6 @@ export default async function handler(req: Request) {
               background: theme === "dark" 
                 ? "rgba(9,9,11,0.7)" 
                 : "rgba(255,255,255,0.7)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
-              backdropFilter: "blur(8px)",
             }}
           >
             {/* Logo Text */}
@@ -116,9 +103,8 @@ export default async function handler(req: Request) {
               <span style={{ fontSize: 120, marginLeft: "10px", marginRight: "10px" }}>🚀</span>
               <span 
                 style={{ 
-                  background: "linear-gradient(90deg, #FB7A09, #F43F5E)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
+                  fontSize: 120,
+                  color: "#FB7A09",
                   display: "inline-block",
                 }}
               >
@@ -157,14 +143,29 @@ export default async function handler(req: Request) {
       {
         width: 1200,
         height: 630,
+        // Optimize for better compatibility
+        emoji: "twemoji",
+        debug: false,
       },
     );
     
-    // Add appropriate caching headers to the response
-    const response = new Response(imageResponse.body, imageResponse);
-    response.headers.set("Cache-Control", CACHE_CONTROL_HEADER);
+    // Get the image data as an array buffer
+    const imageData = await imageResponse.arrayBuffer();
     
-    return response;
+    // Create a properly formatted response with explicit content-type and length
+    return new Response(imageData, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": imageData.byteLength.toString(),
+        "Cache-Control": CACHE_CONTROL_HEADER,
+        "Accept-Encoding": "gzip, deflate", // Tell proxies what we accept
+        "Vary": "Accept-Encoding", // Indicate that response varies based on Accept-Encoding
+        "Access-Control-Allow-Origin": "*",
+        "X-Content-Type-Options": "nosniff",
+        "X-Netlify-Og": "edge-function" // Debugging header
+      },
+    });
   } catch (e: any) {
     console.error(`Error generating OG image: ${e.message}. Attempting to serve fallback.`);
     
@@ -177,26 +178,44 @@ export default async function handler(req: Request) {
       if (!fallbackResponse.ok) {
         // Log if fallback fetch fails
         console.error(`Failed to fetch fallback image: ${fallbackResponse.status} ${fallbackResponse.statusText}`);
-        // Return the original error response if fallback fails
-        return new Response(`Failed to generate dynamic image and failed to fetch fallback: ${e.message}`, { status: 500 });
+        // Return a simple error response with proper headers
+        return new Response("Failed to generate image", { 
+          status: 500,
+          headers: {
+            "Content-Type": "text/plain",
+            "Cache-Control": "no-cache"
+          }
+        });
       }
 
-      // Return the fallback image content with appropriate headers
+      // Get the fallback image data
       const imageBuffer = await fallbackResponse.arrayBuffer();
-      // Return the fallback image with proper headers for production
+      
+      // Return the fallback image with proper headers
       return new Response(imageBuffer, {
         status: 200,
         headers: {
-          'Content-Type': fallbackResponse.headers.get('Content-Type') || 'image/png', // Use actual content type or default to png
-          'Cache-Control': CACHE_CONTROL_HEADER, // Consistent caching policy
-          'X-Fallback-Image': 'true' // Debugging header to indicate fallback was used
+          "Content-Type": "image/png",
+          "Content-Length": imageBuffer.byteLength.toString(),
+          "Cache-Control": CACHE_CONTROL_HEADER,
+          "Accept-Encoding": "gzip, deflate", // Tell proxies what we accept
+          "Vary": "Accept-Encoding", // Indicate that response varies based on Accept-Encoding
+          "Access-Control-Allow-Origin": "*",
+          "X-Content-Type-Options": "nosniff",
+          "X-Fallback-Image": "true" // Debugging header to indicate fallback was used
         },
       });
     } catch (fallbackError: any) {
       // Log if there's an error during the fallback fetch process
       console.error(`Error fetching fallback image: ${fallbackError.message}`);
-      // Return the original error response if fallback fetch throws an error
-      return new Response(`Failed to generate dynamic image and fallback fetch error: ${e.message}`, { status: 500 });
+      // Return a simple error response
+      return new Response("Failed to generate image", { 
+        status: 500,
+        headers: {
+          "Content-Type": "text/plain",
+          "Cache-Control": "no-cache"
+        }
+      });
     }
   }
 } 
