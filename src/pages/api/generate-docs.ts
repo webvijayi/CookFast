@@ -19,6 +19,10 @@
 // Timestamp: 2025-04-22T11:20:00Z - Fixed 405 response lint error.
 // Timestamp: YYYY-MM-DD - Added logging for raw AI response before parsing
 // Timestamp: 2025-04-22T21:20:00Z - Removed duplicate selectedDocKeys declaration.
+// Timestamp: 2025-05-04T10:13:07Z - Fixed TypeScript errors in Anthropic stream handling.
+// Timestamp: 2025-05-04T10:19:25Z - Updated Anthropic model to Sonnet and corrected max_tokens limit.
+// Timestamp: 2025-05-04T10:22:39Z - Updated Anthropic model to claude-3-7-sonnet-20250219 based on docs.
+// Timestamp: 2025-05-04T10:26:08Z - Enabled Anthropic 128k output beta and updated token limit.
 import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerateContentCandidate, GenerateContentResponse, BlockReason } from '@google/generative-ai';
 import OpenAI from 'openai';
@@ -80,7 +84,7 @@ const GEMINI_MODELS = {
   FALLBACK: "gemini-2.5-pro-preview-03-25" // Paid/Preview model
 };
 const OPENAI_MODEL = "gpt-4.1";
-const ANTHROPIC_MODEL = "claude-3-opus-20240229";
+const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Use specific Sonnet 3.7 model from docs
 
 // Safety settings for Gemini
 const safetySettings = [
@@ -94,7 +98,7 @@ const safetySettings = [
 const TOKEN_LIMITS = {
   gemini: 65536, // Common output limit for 2.5 Pro variants
   openai: 16384, // Corrected limit for GPT-4.1 max output tokens (was 32768)
-  anthropic: 64000
+  anthropic: 128000 // Enabled 128k output beta for Claude 3.7 Sonnet
 };
 
 // // Simple rate limiter (REMOVED - ineffective in serverless)
@@ -603,57 +607,94 @@ async function generateWithOpenAI(
   }
 }
 
-// Updated generateWithAnthropic (relying on prompt for JSON)
+// Timestamp: 2025-05-04T10:12:33Z - Refactored Anthropic generation to use streaming API.
+// Updated generateWithAnthropic (using streaming)
 async function generateWithAnthropic(
   apiKey: string,
   prompt: string,
   requestId: string,
   isBackground: boolean
 ): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL} (Requesting JSON structure via prompt)`);
+  console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL} (Streaming Enabled)`);
   const anthropic = new Anthropic({ apiKey });
 
-  try {
-    const messageFn = () => anthropic.messages.create({
-        model: ANTHROPIC_MODEL,
-        max_tokens: TOKEN_LIMITS.anthropic,
-        system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid, non-empty JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object with at least one document - no text before or after. NEVER return an empty JSON object {}. When generating Application Flow documentation, include multiple Mermaid diagrams with proper syntax in markdown code blocks using ```mermaid for flowcharts and sequence diagrams.",
-        messages: [{ role: "user", content: prompt }],
-      });
+  let responseText = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const startTime = Date.now();
+  const timeout = isBackground ? 840000 : 60000; // 14 mins for background, 60s for regular
 
-    const response = await withRetry(
-      messageFn,
-      {
-        retries: 2,
-        retryDelayMs: 1500,
-        isBackground,
-        timeoutMs: isBackground ? 840000 : 60000 // Use longer timeout for background functions
+  try {
+    // Add the beta header for 128k output
+    const stream = anthropic.messages.stream({
+      model: ANTHROPIC_MODEL,
+      max_tokens: TOKEN_LIMITS.anthropic,
+      system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid, non-empty JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object with at least one document - no text before or after. NEVER return an empty JSON object {}. When generating Application Flow documentation, include multiple Mermaid diagrams with proper syntax in markdown code blocks using ```mermaid for flowcharts and sequence diagrams.",
+      messages: [{ role: "user", content: prompt }],
+    }, {
+      headers: {
+        'anthropic-beta': 'output-128k-2025-02-19'
       }
+    });
+
+    // Handle timeout manually for streaming
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Anthropic stream timed out after ${timeout / 1000}s`)), timeout)
     );
 
-    let responseText = '';
-    if (response.content && Array.isArray(response.content)) {
-      // Handle potential TextBlock or other block types
-      responseText = response.content.map(block => block.type === 'text' ? block.text : '').join('');
-    } else {
-        console.warn(`[${requestId}] Unexpected Anthropic response content format:`, response.content);
-    }
+    const streamProcessing = async () => {
+      for await (const event of stream) {
+        if (Date.now() - startTime > timeout) {
+           throw new Error(`Anthropic stream processing exceeded timeout of ${timeout / 1000}s`);
+        }
 
-    if (!responseText) {
-      console.error(`[${requestId}] Anthropic Error: No content returned. Stop reason: ${response.stop_reason}`);
-      throw new Error(`No content generated by Anthropic. Stop Reason: ${response.stop_reason}`);
-    }
-
-    responseText = responseText.replace(/^```json\s*([\s\S]*?)\s*```$/, '$1').trim(); // Clean ```json
-
-    const usage = response.usage;
-    const tokens = {
-      input: usage?.input_tokens || 0,
-      output: usage?.output_tokens || 0,
-      total: (usage?.input_tokens || 0) + (usage?.output_tokens || 0)
+        // Check for stream error first
+        if (event.type === 'error') {
+           console.error(`[${requestId}] Anthropic stream error:`, event.error);
+           // Ensure event.error is accessed correctly based on potential type
+           const errorMessage = (event.error as any)?.message || 'Unknown stream error';
+           throw new Error(`Anthropic API Stream Error: ${errorMessage}`);
+        }
+        // Handle other event types
+        else if (event.type === 'message_start') {
+          inputTokens = event.message.usage.input_tokens;
+          console.log(`[${requestId}] Anthropic stream started. Input tokens: ${inputTokens}`);
+        } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          responseText += event.delta.text;
+          // Optional: Log progress periodically
+          // if (responseText.length % 1000 < event.delta.text.length) { // Log roughly every 1000 chars
+          //   console.log(`[${requestId}] Anthropic stream progress: Received ${responseText.length} chars`);
+          // }
+        } else if (event.type === 'message_delta') {
+          outputTokens += event.usage.output_tokens; // Accumulate output tokens
+        } else if (event.type === 'message_stop') {
+          console.log(`[${requestId}] Anthropic stream finished.`);
+        }
+        // Optional: Log unhandled known event types if necessary
+        // else if (event.type === 'content_block_start' || event.type === 'content_block_stop') {
+        //    console.log(`[${requestId}] Anthropic stream event: ${event.type}`);
+        // }
+      }
     };
 
-    console.log(`[${requestId}] Anthropic generation successful. Tokens: ${JSON.stringify(tokens)}`);
+    // Race the stream processing against the timeout
+    await Promise.race([streamProcessing(), timeoutPromise]);
+
+    if (!responseText) {
+      console.error(`[${requestId}] Anthropic Error: No content generated via stream.`);
+      throw new Error('No content generated by Anthropic stream.');
+    }
+
+    // Clean potential markdown code fences after streaming is complete
+    responseText = responseText.replace(/^```json\s*([\s\S]*?)\s*```$/, '$1').trim();
+
+    const tokens = {
+      input: inputTokens,
+      output: outputTokens, // Use accumulated output tokens
+      total: inputTokens + outputTokens
+    };
+
+    console.log(`[${requestId}] Anthropic stream generation successful. Final Output Tokens: ${outputTokens}, Total Tokens: ${tokens.total}. Response length: ${responseText.length}`);
 
     return {
       responseText: responseText,
@@ -662,11 +703,12 @@ async function generateWithAnthropic(
     };
 
   } catch (error: any) {
-    console.error(`[${requestId}] Error calling Anthropic:`, error.message);
-     if (error.response?.data) {
-      console.error(`[${requestId}] Anthropic API Error Details:`, error.response.data);
+    console.error(`[${requestId}] Error calling Anthropic stream:`, error.message);
+    // Attempt to log more details if available (e.g., from APIError type)
+    if (error instanceof Anthropic.APIError) {
+       console.error(`[${requestId}] Anthropic API Error Details: Status=${error.status}, Headers=${JSON.stringify(error.headers)}, Message=${error.message}`);
     }
-    throw new Error(`Anthropic API Error: ${error.message}`);
+    throw new Error(`Anthropic API Stream Error: ${error.message}`);
   }
 }
 
