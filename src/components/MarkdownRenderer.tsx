@@ -73,19 +73,18 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
       mermaid.initialize({
         startOnLoad: false, // We call run manually
         theme: isDarkMode ? 'dark' : 'default',
-        securityLevel: 'loose', 
-        logLevel: 3, 
-        fontFamily: 'inherit', 
+        securityLevel: 'loose',
+        logLevel: 3,
+        fontFamily: 'inherit',
         flowchart: { htmlLabels: true, curve: 'basis' },
-        sequence: { 
-          diagramMarginX: 50, diagramMarginY: 10, actorMargin: 50, width: 150, height: 65, 
-          boxMargin: 10, boxTextMargin: 5, noteMargin: 10, messageMargin: 35, messageAlign: 'center' 
-        },
-        suppressErrors: true, 
+        sequence: { diagramMarginX: 50, diagramMarginY: 10, actorMargin: 50, width: 150, height: 65, boxMargin: 10, boxTextMargin: 5, noteMargin: 10, messageMargin: 35, messageAlign: 'center' },
+        suppressErrors: false,
         errorHandler: (error: string, errorDetails?: any) => {
           console.error("Mermaid rendering error (errorHandler):", error, errorDetails);
         }
       });
+      // Register parseError handler for syntax validation
+      mermaid.parseError = (err: unknown, hash?: any) => console.error('[Mermaid] parseError:', err, hash);
       // Explicitly call contentLoaded after initialize
       mermaid.contentLoaded(); 
       mermaidInitialized.current = true; // Mark as initialized
@@ -102,57 +101,100 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, isDarkMode
         const el = mermaidElements[i];
         let diagramText = el.textContent || '';
         
-        try {
-          // **Enhanced Sanitization + Fixes**
-          diagramText = diagramText.replace(/\r\n|\r/g, '\n');
-          diagramText = diagramText.split('\n').map(line => line.trim()).join('\n').trim();
-          diagramText = diagramText.replace(/^```mermaid\s*/, '').replace(/\s*```$/, '').trim();
-          diagramText = diagramText.replace(/\n{2,}/g, '\n'); 
-          diagramText = diagramText.replace(/^\s*\/\/.*$/gm, ''); // Remove comments
-          diagramText = diagramText.replace(/^flowchart/gm, 'graph'); // Use graph alias
-          
-          // Fix pipe character syntax in edge labels by adding spaces
-          // This addresses the common error with edge labels like: A -->|Label|B
-          diagramText = diagramText.replace(/(\|)([^\s|])/g, '$1 $2'); // Add space after opening pipe
-          diagramText = diagramText.replace(/([^\s|])(\|)/g, '$1 $2'); // Add space before closing pipe
-          
-          // Fix labels with parens: C[...] -> C["..."]
-          diagramText = diagramText.replace(/(\[)([^"\]]*\([^)]*\)[^"\]]*)(\])/g, (match, open, content, close) => {
-             return `${open}"${content.replace(/"/g, '#quot;')}"${close}`;
-          });
-          
-          // Ensure space after edge label closing pipe: |Text|Node -> |Text| Node
-          diagramText = diagramText.replace(/(\|)(\S)/g, '$1 $2'); 
-          
-          // Replace semicolon immediately after node definition with newline
-          diagramText = diagramText.replace(/([\)\]\}<>]);/g, '$1\n');
-
-          // Fix common syntax issues with edge labels
-          diagramText = diagramText.replace(/(-->|==>|~~>|-.->|===>)(\|)([^|]+)(\|)([^\s])/g, '$1$2$3$4 $5');
-
-          console.log(`[Mermaid] Prepared code for diagram ${i}:\n${diagramText}`); 
-
-          const container = document.createElement('div');
-          container.setAttribute('data-mermaid-processed', 'false'); // Mark for rendering
-          container.className = 'mermaid'; // Class needed for mermaid.run querySelector
-          container.id = `mermaid-container-${i}-${Date.now()}`;
-          container.textContent = diagramText; 
-
-          const preElement = el.parentElement;
-          if (preElement?.parentElement) {
-            preElement.parentElement.replaceChild(container, preElement);
-            containersToRender.push(container); // Add to list for batch rendering
-          } else {
-             console.warn(`[Mermaid] Could not find parent element for pre tag of diagram ${i}`);
+        // **Enhanced Sanitization + Fixes**
+        diagramText = diagramText.replace(/\r\n|\r/g, '\n');
+        diagramText = diagramText.split('\n').map(line => line.trim()).join('\n').trim();
+        diagramText = diagramText.replace(/^```mermaid\s*/, '').replace(/\s*```$/, '').trim();
+        diagramText = diagramText.replace(/\n{2,}/g, '\n'); 
+        diagramText = diagramText.replace(/^\s*\/\/.*$/gm, ''); // Remove comments
+        
+        // Fix pipe character syntax in edge labels by adding spaces
+        diagramText = diagramText.replace(/(\|)([^\s\|])/g, '$1 $2'); // Add space after opening pipe
+        diagramText = diagramText.replace(/([^\s\|])(\|)/g, '$1 $2'); // Add space before closing pipe
+        
+        // Fix AI-generated 'endsubgraph <Name>' and ensure 'end' is on its own line
+        diagramText = diagramText.replace(/endsubgraph\s+\w+/gi, match => `\nend\n`);
+        // Quote labels with parentheses or special chars inside brackets
+        diagramText = diagramText.replace(/(\[)([^"\]]*\([^)]*\)[^"\]]*)(\])/g, (_match, open, content, close) => {
+          return `${open}"${content.replace(/"/g, '#quot;')}"${close}`;
+        });
+        
+        // Ensure semicolon terminator
+        if (!diagramText.trim().endsWith(';')) diagramText += ';';
+        
+        // Fix unquoted labels with spaces
+        diagramText = diagramText.replace(/(\[)([^"\]]*\s+[^"\]]*)(\])/g, (_match, open, content, close) => {
+          return `${open}"${content.replace(/"/g, '#quot;')}"${close}`;
+        });
+        
+        // Fix incorrect subgraph endings
+        diagramText = diagramText.replace(/\bend\b\s*(\w+)/gi, 'end');
+        
+        // Fix missing quotes around edge labels with special characters
+        diagramText = diagramText.replace(/(-->|---|===>|-.->)\s*\|([^|]*[\s(),;:].*?)\|/g, 
+          (match, arrow, label) => {
+            // Only quote if not already quoted
+            if (!label.startsWith('"') && !label.endsWith('"')) {
+              return `${arrow}|"${label.replace(/"/g, '#quot;')}"|`;
+            }
+            return match;
           }
-        } catch (processingError: unknown) {
-          // Handle errors during text processing/container creation
-          const errorMessage = processingError instanceof Error ? processingError.message : String(processingError);
-          console.error(`[Mermaid] Error preparing diagram ${i} text:`, errorMessage);
+        );
+        
+        // Fix incorrect node link syntax (e.g., A[Label]B --> C to A[Label] --> C)
+        diagramText = diagramText.replace(/(\w+(?:\[(?:"[^"]*"|[^\]]*)\]|\([^)]*\)|\{[^}]*\}))(\w+)/g, '$1 --> $2');
+        
+        // Ensure proper syntax for classes
+        diagramText = diagramText.replace(/class\s+(\w+)\s+(\w+)(?!\s*[":{])/g, 'class $1 "$2"');
+        
+        // Validate syntax before rendering
+        try {
+          await mermaid.parse(diagramText);
+        } catch (parseErr: any) {
           const errorDiv = document.createElement('div');
           errorDiv.className = 'p-4 border border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm';
-          errorDiv.textContent = `Error preparing diagram: ${errorMessage}`;
+          // Provide more helpful error message with line numbers when available
+          let errorMessage = `Mermaid Syntax Error: ${parseErr.message || parseErr}`;
+          
+          // Extract line number from common error message formats
+          const lineMatch = /line\s+(\d+):/i.exec(errorMessage);
+          if (lineMatch && lineMatch[1]) {
+            const lineNumber = parseInt(lineMatch[1], 10);
+            const lines = diagramText.split('\n');
+            
+            // Show problematic line and context (if available)
+            let contextLines = '';
+            const startLine = Math.max(0, lineNumber - 2);
+            const endLine = Math.min(lines.length, lineNumber + 2);
+            
+            for (let i = startLine; i < endLine; i++) {
+              const isErrorLine = i + 1 === lineNumber;
+              contextLines += `${i + 1}${isErrorLine ? ' →' : '  '} ${lines[i]}\n`;
+            }
+            
+            errorMessage += `\n\nProblematic section:\n${contextLines}`;
+          }
+          
+          errorDiv.innerHTML = `<div>${errorMessage.replace(/\n/g, '<br/>')}</div>`;
           el.parentElement?.parentElement?.replaceChild(errorDiv, el.parentElement);
+          continue; // Skip this diagram
+        }
+        
+        console.log(`[Mermaid] Prepared code for diagram ${i}:
+${diagramText}`); 
+
+        const container = document.createElement('div');
+        container.setAttribute('data-mermaid-processed', 'false'); // Mark for rendering
+        container.className = 'mermaid'; // Class needed for mermaid.run querySelector
+        container.id = `mermaid-container-${i}-${Date.now()}`;
+        container.textContent = diagramText; 
+
+        const preElement = el.parentElement;
+        if (preElement?.parentElement) {
+          preElement.parentElement.replaceChild(container, preElement);
+          containersToRender.push(container); // Add to list for batch rendering
+        } else {
+           console.warn(`[Mermaid] Could not find parent element for pre tag of diagram ${i}`);
         }
       }
 

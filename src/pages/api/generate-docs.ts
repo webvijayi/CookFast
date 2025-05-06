@@ -322,18 +322,35 @@ function buildPrompt(details: ProjectDetails, selectedDocs: DocumentSelection): 
                  `   - Show interactions between frontend and backend if both exist\n` +
                  `   - Add helpful labels, annotations, and captions\n` +
                  `   - Use proper Mermaid syntax with no mistakes\n\n` +
-                 `6. **Strict Syntax Rules & Common Errors to AVOID:**\n` + // Moved this block inside the string
-                 `   - **NO Invalid Link Text:** NEVER write \\\`C -->|Text|"D"\\\`. Correct: \\\`C -->|Text| D\\\` (Space after \\\`|\\\`, no quotes around \\\`D\\\`).\n` + // Escaped backticks
-                 `   - **NO Invalid Arrows:** NEVER write \\\`--> >\\\`. Correct: \\\`-->\\\`.\n` + // Escaped backticks
-                 `   - **NO Missing Newlines:** NEVER write \\\`NodeA[Label]NodeB\\\`. Correct: \\\`NodeA[Label]\\\\nNodeB\\\` or \\\`NodeA[Label] --> NodeB\\\`.\n` + // Escaped backticks
-                 `   - **NO Invalid Node Links:** NEVER write \\\`NodeA("Text")] --> NodeB\\\`. Correct: \\\`NodeA("Text") --> NodeB\\\` (Ensure space after node definition).\n` + // Escaped backticks
-                 `   - **QUOTE LABELS WITH SPECIAL CHARS:** Node labels containing spaces, parentheses \`()\`, brackets \`[]\`, braces \`{}\`, colons \`:\`, semicolons \`;\`, quotes \`"\`, or other special characters MUST be enclosed in double quotes \\\`""\\\`. \n` + // Escaped backticks
-                 `   - **ESCAPE INTERNAL QUOTES:** If a quoted label itself contains double quotes, escape them using the HTML entity \\\`#quot;\\\`. Example: \\\`A["Label with #quot;internal quotes#quot;"]\\\` is correct. \\\`A["Label with "internal quotes""]\\\` is WRONG.\n` + // Escaped backticks
-                 `   - **EXAMPLE (Parentheses):** \\\`C["Navigates to Service Category Page (e.g., Web Development)"]\\\` is correct. \\\`C[Navigates to Service Category Page (e.g., Web Development)]\\\` is WRONG.\n` + // Escaped backticks
-                 `   - **EXAMPLE (Edge Label):** \\\`B -->|"Failure (e.g., Email Service Down)"| D\\\` is correct. \\\`B -->|Failure (e.g., Email Service Down)| D\\\` is WRONG if quotes are needed.\n` + // Escaped backticks
-                 `   - **NO COMMENTS:** NEVER include comments (like \`//\` or lines starting with \`%%\` unless it's a specific directive) inside the \\\`\\\`\\\`mermaid code blocks. Comments cause parsing errors.\n` + // Escaped backticks
-                 `   - **Sequence Diagram Participants:** Ensure all interacting entities in sequence diagrams are declared with \`participant\` or \`actor\` keywords BEFORE they are used in messages.\n` +
-                 `   - **Sequence Diagram Messages:** Ensure messages have a colon \`:\` separating the participants/arrow from the message text.\n` +
+                 
+                 `6. **Critical Syntax Rules:**\n` +
+                 `   - **ALWAYS follow these guidelines:**\n` +
+                 `   - **Keep It Simple**: Limit diagram complexity - fewer than 15 nodes per diagram\n` +
+                 `   - **ONE statement per line**: Each connection should be on its own line\n` +
+                 `   - **NO subgraph with names**: NEVER use 'endsubgraph Name', use 'end' by itself\n` +
+                 `   - **Proper spacing**: Always have spaces after arrows and between elements\n` +
+                 `   - **No empty lines or comments**: Do not include any comments in diagrams\n` +
+                 `   - **Terminate properly**: Always end diagrams with a semicolon\n\n` +
+                 
+                 `7. **Node & Label Formatting:**\n` +
+                 `   - **Always quote node labels with spaces**: A["Node with spaces"] not A[Node with spaces]\n` +
+                 `   - **Always quote node labels with parentheses**: B["Process (with details)"] not B[Process (with details)]\n` +
+                 `   - **Always quote edge labels with special chars**: A -->|"Label with: special, chars"| B\n` +
+                 `   - **Escape internal quotes**: Use #quot; for quotes inside quoted labels\n` +
+                 `   - **Proper edge syntax**: Add spaces after | in edge labels: A -->|"Yes"| B (not A -->|"Yes"|B)\n\n` +
+                 
+                 `8. **Sequence Diagram Rules:**\n` +
+                 `   - **Declare ALL participants first**: List all participants at the top before using them\n` +
+                 `   - **Use simple arrows**: Only use ->> and -->> arrows (not fancy variations)\n` +
+                 `   - **Include message text**: ALWAYS add descriptive text after the colon\n` +
+                 `   - **No activation blocks**: For simplicity, avoid using activate/deactivate\n\n` +
+                 
+                 `9. **Flowchart Rules:**\n` +
+                 `   - **Use flowchart TD or LR**: Not graph or other variants\n` +
+                 `   - **Node IDs must be single letters or alphanumeric**: A, B, C or A1, B2, UserLogin (no spaces or special chars)\n` +
+                 `   - **Proper node shapes**: A[Rectangle], B(Rounded), C{Diamond}, D([Stadium]), E[(Database)]\n` +
+                 `   - **Always use spaces around arrows**: A --> B not A-->B\n` +
+                 `   - **Always terminate with semicolon**: Place semicolon at the end\n` +
                  `</mermaid_diagram_instructions>\n\n`;
   }
 
@@ -648,15 +665,9 @@ async function generateWithAnthropic(
            throw new Error(`Anthropic stream processing exceeded timeout of ${timeout / 1000}s`);
         }
 
-        // Check for stream error first
-        if (event.type === 'error') {
-           console.error(`[${requestId}] Anthropic stream error:`, event.error);
-           // Ensure event.error is accessed correctly based on potential type
-           const errorMessage = (event.error as any)?.message || 'Unknown stream error';
-           throw new Error(`Anthropic API Stream Error: ${errorMessage}`);
-        }
-        // Handle other event types
-        else if (event.type === 'message_start') {
+        // Handle stream event types - there is no 'error' type in the Anthropic stream API
+        // Instead errors are thrown as exceptions and caught outside the stream loop
+        if (event.type === 'message_start') {
           inputTokens = event.message.usage.input_tokens;
           console.log(`[${requestId}] Anthropic stream started. Input tokens: ${inputTokens}`);
         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
@@ -670,15 +681,26 @@ async function generateWithAnthropic(
         } else if (event.type === 'message_stop') {
           console.log(`[${requestId}] Anthropic stream finished.`);
         }
-        // Optional: Log unhandled known event types if necessary
-        // else if (event.type === 'content_block_start' || event.type === 'content_block_stop') {
-        //    console.log(`[${requestId}] Anthropic stream event: ${event.type}`);
-        // }
+        // Optional: Log any unrecognized event types for debugging
+        else {
+          console.log(`[${requestId}] Anthropic unhandled stream event type: ${event.type}`);
+        }
       }
     };
 
-    // Race the stream processing against the timeout
-    await Promise.race([streamProcessing(), timeoutPromise]);
+    // Wrap stream handling to catch errors from the stream itself
+    try {
+      // Race the stream processing against the timeout
+      await Promise.race([streamProcessing(), timeoutPromise]);
+    } catch (streamError: any) {
+      // Handle stream-specific errors
+      if (streamError.name === 'APIError' || streamError.status || streamError.statusCode) {
+        console.error(`[${requestId}] Anthropic API Error in stream: ${streamError.message}`);
+        throw new Error(`Anthropic API Stream Error: ${streamError.message}`);
+      }
+      // Re-throw other errors
+      throw streamError;
+    }
 
     if (!responseText) {
       console.error(`[${requestId}] Anthropic Error: No content generated via stream.`);

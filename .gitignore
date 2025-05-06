@@ -120,3 +120,6 @@ Updates.md
 /docs/
 /.docs/
 .docs/
+
+# Local Netlify folder
+.netlify
