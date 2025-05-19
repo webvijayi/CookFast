@@ -1,41 +1,80 @@
 'use client';
 
 import { useTheme } from '@/contexts/ThemeContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Check, Moon, Sun, Monitor } from 'lucide-react';
 
-// Sun icon for light mode
-const SunIcon = () => (
-  <svg className="h-6 w-6 md:h-5 md:w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-  </svg>
-);
-
-// Moon icon for dark mode
-const MoonIcon = () => (
-  <svg className="h-6 w-6 md:h-5 md:w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-  </svg>
-);
+const themeOptions = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+] as const;
 
 export default function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, themePreference, setThemePreference } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   // Only render after first client-side mount to avoid hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!mounted) return null;
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" className="w-10 px-0">
+        <Sun className="h-5 w-5" />
+      </Button>
+    );
+  }
+
+
+  const currentTheme = themeOptions.find((t) => t.value === themePreference) || 
+                     themeOptions.find((t) => t.value === 'system');
+  const CurrentIcon = currentTheme?.icon || Sun;
 
   return (
-    <button
-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-      onClick={toggleTheme}
-      className="theme-toggle" 
-      type="button"
-    >
-      {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-    </button>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button 
+          ref={buttonRef}
+          variant="ghost" 
+          size="icon"
+          className="w-10 px-0"
+          aria-label="Toggle theme"
+        >
+          <CurrentIcon className="h-5 w-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        {themeOptions.map(({ value, label, icon: Icon }) => {
+          const isActive = themePreference === value;
+          return (
+            <DropdownMenuItem
+              key={value}
+              className="cursor-pointer justify-between"
+              onClick={() => {
+                setThemePreference(value);
+                setIsOpen(false);
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4" />
+                <span>{label}</span>
+              </div>
+              {isActive && <Check className="h-4 w-4" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
