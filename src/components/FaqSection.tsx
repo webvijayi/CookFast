@@ -3,8 +3,7 @@
 import React from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import Link from 'next/link';
-import Script from 'next/script';
+// Removed unused imports: Link, Script
 
 // FAQ section with common questions and answers
 export default function FaqSection() {
@@ -27,8 +26,44 @@ export default function FaqSection() {
       answer: "The name 'CookFast' comes from the idea that it helps you 'cook up' (prepare) the basics of your idea quickly. Just as a chef prepares ingredients before cooking, CookFast helps prepare your project's foundation fast, so you can start building immediately."
     },
     {
-      question: "Which AI providers does CookFast support?",
-      answer: "CookFast supports multiple AI providers including OpenAI (GPT-4.1), Anthropic (Claude 3.7 Sonnet), and Google (Gemini 2.5 Pro). Each provider offers different capabilities: GPT-4.1 supports up to 1,000,000 tokens of context, Gemini 2.5 Pro allows up to 1,048,576 input tokens, and Claude 3.7 Sonnet has a 200,000-token context window."
+      question: "Which AI providers and models does CookFast support?",
+      answer: {
+        jsx: (
+          <>
+            CookFast supports four major AI providers with 30+ models to choose from:
+            <br /><br />
+            <strong>OpenAI Models:</strong>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><strong>GPT-4.1</strong> (1M context, 32K output) - Latest flagship with improved coding</li>
+              <li><strong>o3 Series</strong> (200K context, 65K output) - Advanced reasoning models (o3, o3 Pro, o3 Mini)</li>
+              <li><strong>o4 Mini Series</strong> (200K context, 32K output) - Optimized reasoning models</li>
+              <li><strong>GPT-4o Series</strong> (128K context, 16K output) - Multimodal capabilities</li>
+            </ul>
+            <br />
+            <strong>Google Gemini Models:</strong>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><strong>Gemini 2.5 Pro</strong> (1M+ context, 65K output) - Always-on thinking</li>
+              <li><strong>Gemini 2.5 Flash</strong> (1M+ context, 65K output) - Configurable thinking budget</li>
+              <li><strong>Gemini 2.0 Flash</strong> (1M context, 32K output) - Next-gen with native tool use</li>
+            </ul>
+            <br />
+            <strong>Anthropic Models:</strong>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><strong>Claude Opus 4</strong> (200K context, 128K output) - Most capable with hybrid reasoning</li>
+              <li><strong>Claude Sonnet 4</strong> (200K context, 128K output) - High performance hybrid reasoning</li>
+              <li><strong>Claude 3.7 Sonnet</strong> (200K context, 64K output) - Extended reasoning enabled</li>
+            </ul>
+            <br />
+            <strong>X.ai Models:</strong>
+            <ul className="list-disc pl-5 mt-2 space-y-1">
+              <li><strong>Grok 4</strong> (256K context, 32K output) - Frontier-level with always-on reasoning</li>
+              <li><strong>Grok 3</strong> (1M context, 16K output) - Advanced reasoning capabilities</li>
+              <li><strong>Grok 3 Mini</strong> (128K context, 8K output) - Cost-efficient reasoning</li>
+            </ul>
+          </>
+        ),
+        text: "CookFast supports four major AI providers with 30+ models including OpenAI (GPT-4.1, o3 series), Google Gemini (2.5 Pro, 2.5 Flash), Anthropic (Claude Opus 4, Sonnet 4), and X.ai (Grok 4, Grok 3) with various context windows and reasoning capabilities."
+      }
     },
     {
       question: "Do I need to provide my own API keys?",
@@ -69,7 +104,7 @@ export default function FaqSection() {
       answer: {
         jsx: (
           <>
-            CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google). If you'd like to support the development:
+            CookFast is completely <a href="https://github.com/webvijayi/CookFast" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">free and open-source</a>. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, Google, or X.ai). If you&apos;d like to support the development:
             <div className="mt-3 flex flex-wrap gap-2">
               <a href="https://buymeacoffee.com/lokeshmotwani" target="_blank" rel="noopener noreferrer">
                 <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" className="h-8 sm:h-10" />
@@ -85,7 +120,7 @@ export default function FaqSection() {
             </div>
           </>
         ),
-        text: "CookFast is completely free and open-source. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, or Google)."
+        text: "CookFast is completely free and open-source. You only pay for the API usage charged by your chosen AI provider (OpenAI, Anthropic, Google, or X.ai)."
       }
     },
     {

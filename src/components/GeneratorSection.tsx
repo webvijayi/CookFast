@@ -64,7 +64,7 @@ const LinkedInIcon = ({ className = "h-5 w-5" }) => (
 );
 
 // Types for the form
-type AIProvider = 'gemini' | 'openai' | 'anthropic';
+type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'xai';
 
 interface ProjectDetails {
   projectName: string;
@@ -230,6 +230,7 @@ export default function GeneratorSection() {
     selectedDocs: DocumentSelection,
     provider: AIProvider,
     apiKey: string,
+    modelId: string,
     runInBackgroundFlag: boolean // This parameter will be ignored
   ) => {
     // --- Reset Section ---
@@ -315,6 +316,7 @@ export default function GeneratorSection() {
           selectedDocs: selectedDocs,
           provider,
           apiKey,
+          modelId,
         }),
         signal: controller.signal,
       });

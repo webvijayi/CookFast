@@ -28,11 +28,32 @@ CookFast can generate the following planning documents:
 - **Deployment Guide**: Environment setup, CI/CD pipeline configuration, and hosting recommendations
 
 ## AI Provider Integration
-CookFast seamlessly integrates with multiple AI providers:
+CookFast seamlessly integrates with multiple AI providers offering extensive model selection:
 
-- **OpenAI**: Uses GPT-4.1 with 1,000,000 token context window (32,768 output tokens)
-- **Google**: Leverages Gemini 2.5 Pro with 1,048,576 token context window (65,536 output tokens)
-- **Anthropic**: Employs Claude 3.7 Sonnet with 200,000 token context window (64,000 output tokens)
+### OpenAI Models
+- **GPT-4.1**: 1M token context, 32K output - Latest flagship with improved coding and instruction following
+- **o3 Series**: 200K context, 65K output - Advanced reasoning models (o3, o3 Pro, o3 Mini)
+- **o4 Mini Series**: 200K context, 32K output - Optimized reasoning models (o4 Mini, o4 Mini High)
+- **GPT-4o Series**: 128K context, 16K output - Multimodal flagship models (GPT-4o, GPT-4o Mini)
+- **Legacy Models**: GPT-4 Turbo, GPT-4, GPT-3.5 Turbo for compatibility
+
+### Google Gemini Models
+- **Gemini 2.5 Pro**: 1M+ context, 65K output - State-of-the-art with always-on thinking capabilities
+- **Gemini 2.5 Flash**: 1M+ context, 65K output - Cost-efficient with configurable thinking budget
+- **Gemini 2.5 Flash-Lite**: 1M context, 64K output - Cost-efficient with optional thinking
+- **Gemini 2.0 Flash**: 1M context, 32K output - Next-gen with native tool use and superior speed
+- **Legacy Models**: Gemini 1.5 Pro, Gemini 1.5 Flash for established workflows
+
+### Anthropic Models
+- **Claude Opus 4**: 200K context, 128K output - Most capable with hybrid reasoning capabilities
+- **Claude Sonnet 4**: 200K context, 128K output - High performance hybrid reasoning model
+- **Claude 3.7 Sonnet**: 200K context, 64K output - Extended reasoning enabled by default
+- **Legacy Models**: Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus for compatibility
+
+### X.ai Models
+- **Grok 4**: 256K context, 32K output - Frontier-level multimodal understanding with always-on reasoning
+- **Grok 3**: 1M context, 16K output - Advanced reasoning model with refined capabilities
+- **Grok 3 Mini**: 128K context, 8K output - Cost-efficient reasoning model
 
 ## Documentation
 - [Project Overview](https://github.com/webvijayi/CookFast#-cookfast-ai-powered-project-planning-documents-): Features and capabilities

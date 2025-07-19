@@ -8,12 +8,19 @@ CookFast is an AI-powered tool that automatically generates comprehensive projec
 
 ## ✨ Features
 
-*   **Multiple AI Providers:** Choose between Google Gemini, OpenAI, and Anthropic models.
-    *   Currently using: Google `gemini-2.5-pro-exp-03-25` (Experimental), OpenAI `gpt-4.1`, Anthropic `claude-3-7-sonnet-20250219` (models subject to future updates).
-*   **Extended Context Windows:** Leverage large context windows of the latest AI models:
-    *   OpenAI GPT-4.1: 1,000,000 tokens context window (32,768 output tokens)
-    *   Gemini 2.5 Pro: 1,048,576 tokens context window (65,536 output tokens)
-    *   Claude 3.7 Sonnet: 200,000 tokens context window (64,000 output tokens)
+*   **Multiple AI Providers:** Choose between Google Gemini, OpenAI, Anthropic, and X.ai models with extensive model selection.
+    *   **OpenAI Models:** GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, o3, o3 Pro, o3 Mini, o4 Mini, o4 Mini High, o1, GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
+    *   **Google Gemini Models:** Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite, Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash
+    *   **Anthropic Models:** Claude Opus 4, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Haiku
+    *   **X.ai Models:** Grok 4, Grok 3, Grok 3 Mini
+*   **Extended Context Windows & Model Selection:** Choose from models with varying capabilities:
+    *   **OpenAI GPT-4.1:** 1M tokens context, 32K output tokens - Latest with improved coding
+    *   **OpenAI o3/o3 Pro:** 200K tokens context, 65K output tokens - Advanced reasoning models
+    *   **Gemini 2.5 Pro:** 1M+ tokens context, 65K output tokens - State-of-the-art with always-on thinking
+    *   **Gemini 2.5 Flash:** 1M+ tokens context, 65K output tokens - Configurable thinking budget
+    *   **Claude Opus 4:** 200K tokens context, 128K output tokens - Most capable with hybrid reasoning
+    *   **Claude Sonnet 4:** 200K tokens context, 128K output tokens - High performance hybrid reasoning
+    *   **X.ai Grok 4:** 256K tokens context, 32K output tokens - Always-on reasoning capabilities
 *   **Flexible Document Selection:** Select the specific planning documents you need, such as:
     *   Project Requirements Document
     *   Frontend Guidelines
@@ -49,10 +56,31 @@ We built CookFast because we often had project ideas (like CookFast itself) and 
 The name 'CookFast' comes from the idea that it helps you 'cook up' (prepare) the basics of your idea quickly. Just as a chef prepares ingredients before cooking, CookFast helps prepare your project's foundation fast, so you can start building immediately.
 
 ### 5. Which AI providers does CookFast support?  
-Currently, CookFast supports multiple AI providers including OpenAI (GPT-4.1), Anthropic (Claude 3.7 Sonnet), and Google (Gemini 2.5 Pro). Each provider offers different capabilities:
-- GPT-4.1 supports up to 1,000,000 tokens of context and can generate up to 32,768 output tokens
-- Gemini 2.5 Pro allows 1,048,576 input tokens and up to 65,536 output tokens
-- Claude 3.7 Sonnet has a 200,000-token context window with 64,000 output tokens
+CookFast supports four major AI providers with extensive model selection:
+
+**OpenAI Models:**
+- GPT-4.1 (1M context, 32K output) - Latest flagship with improved coding
+- o3/o3 Pro/o3 Mini (200K context, 65K output) - Advanced reasoning models
+- o4 Mini/o4 Mini High (200K context, 32K output) - Optimized reasoning models
+- GPT-4o/GPT-4o Mini (128K context, 16K output) - Multimodal capabilities
+- Legacy models: GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
+
+**Google Gemini Models:**
+- Gemini 2.5 Pro (1M+ context, 65K output) - Always-on thinking
+- Gemini 2.5 Flash (1M+ context, 65K output) - Configurable thinking budget
+- Gemini 2.0 Flash (1M context, 32K output) - Next-gen with native tool use
+- Legacy models: Gemini 1.5 Pro, Gemini 1.5 Flash
+
+**Anthropic Models:**
+- Claude Opus 4 (200K context, 128K output) - Most capable with hybrid reasoning
+- Claude Sonnet 4 (200K context, 128K output) - High performance hybrid reasoning
+- Claude 3.7 Sonnet (200K context, 64K output) - Extended reasoning enabled
+- Legacy models: Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus
+
+**X.ai Models:**
+- Grok 4 (256K context, 32K output) - Frontier-level with always-on reasoning
+- Grok 3 (1M context, 16K output) - Advanced reasoning capabilities
+- Grok 3 Mini (128K context, 8K output) - Cost-efficient reasoning
 
 ### 6. Do I need to provide my own API keys?
 Yes, you'll need to provide your own API key for the AI provider you choose to use. This ensures your data security and gives you control over which AI model processes your project information.
@@ -76,6 +104,7 @@ No. API keys are validated client-side and never stored by CookFast. They are se
     * [OpenAI API](https://platform.openai.com/)
     * [Anthropic API](https://www.anthropic.com/product)
     * [Google Gemini API](https://ai.google.dev/)
+    * [X.ai API](https://x.ai/api)
 
 ### Installation & Running Locally
 
@@ -107,11 +136,12 @@ No. API keys are validated client-side and never stored by CookFast. They are se
 
 ### How to Use
 
-1.  Select your preferred AI Provider (Gemini, OpenAI, or Anthropic).
-2.  Enter your corresponding API Key and optionally click "Test" to validate it.
-3.  Fill in the details about your project (Name, Type, Goal, Features, Tech Stack).
-4.  Select the checkboxes for the document types you want to generate.
-5.  Click "Cook Up Docs!".
+1.  Select your preferred AI Provider (Google Gemini, OpenAI, Anthropic, or X.ai).
+2.  Choose your specific model from the available options for enhanced control.
+3.  Enter your corresponding API Key and optionally click "Test" to validate it.
+4.  Fill in the details about your project (Name, Type, Goal, Features, Tech Stack).
+5.  Select the checkboxes for the document types you want to generate.
+6.  Click "Cook Up Docs!".
 6.  While generating, a "Stop Generation" button is available if you need to cancel.
 7.  The generated Markdown content will appear in the results area below the form.
 8.  If the generation fails or you want to try again, a "Retry Generation" button will be available in the results area.

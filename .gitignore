@@ -123,3 +123,6 @@ Updates.md
 
 # Local Netlify folder
 .netlify
+
+# Claude configuration
+CLAUDE.md

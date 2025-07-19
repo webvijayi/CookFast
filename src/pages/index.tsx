@@ -105,7 +105,7 @@ interface DocumentSection {
 // Define application state types
 type PanelState = 'intro' | 'details' | 'docs' | 'results';
 type WorkPhase = 'preparing' | 'generating' | 'complete' | 'error';
-type ModelProvider = 'gemini' | 'openai' | 'anthropic';
+type ModelProvider = 'gemini' | 'openai' | 'anthropic' | 'xai';
 
 interface ModelConfig {
   provider: ModelProvider;
@@ -137,7 +137,7 @@ interface ProjectJSON {
 }
 
 // Define the AI providers
-type AIProvider = 'gemini' | 'openai' | 'anthropic';
+type AIProvider = 'gemini' | 'openai' | 'anthropic' | 'xai';
 
 // --- Constants ---
 const APP_URL = "https://cook-fast.webvijayi.com/"; // Your app's URL
@@ -541,7 +541,7 @@ export default function CookFastHome() {
   const [elapsedTimeSeconds, setElapsedTimeSeconds] = useState<number>(0);
   const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>('anthropic');
+  const [selectedProvider, setSelectedProvider] = useState<ModelProvider>('xai');
   const [isGenerating, setIsGenerating] = useState(false);
   const [sectionProgress, setSectionProgress] = useState(0);
   const [totalSections, setTotalSections] = useState(0);
@@ -1155,18 +1155,18 @@ export default function CookFastHome() {
   return (
     <Fragment>
       <Head>
-        <title>🍳🚀 CookFast | AI-Powered Project Documentation Generator - Free & Open Source</title>
-        {/* Updated SEO Description */}
-        <meta name="description" content="🍳🚀 CookFast is a free AI tool that writes essential product documents (like Requirements Docs & Application Flows) from your idea, helping you start coding faster. Generate docs for Web Apps, Mobile Apps & more!" />
-        {/* Updated SEO Keywords */}
-        <meta name="keywords" content="AI project documentation generator, ai product documents for coding,vibe coding requirements document, ai application flow generator, ai project planning tool, free ai developer documentation tool, ai web app docs generator,ai mobile app docs generator, product technical documentation generator,CookFast" />
+        <title>🍳🚀 CookFast | AI Project Documentation Generator - OpenAI, Anthropic, Gemini, X.ai Models</title>
+        {/* Enhanced SEO Description */}
+        <meta name="description" content="Generate comprehensive project documentation instantly with CookFast! Choose from 30+ AI models including GPT-4.1, o3, Claude Opus 4, Gemini 2.5 Pro, Grok 4. Create requirements docs, architecture plans, and technical specifications in seconds. Free & open source." />
+        {/* Enhanced SEO Keywords */}
+        <meta name="keywords" content="AI documentation generator, GPT-4.1, Claude Opus 4, Gemini 2.5 Pro, Grok 4, OpenAI o3, project planning tool, requirements document generator, AI architecture documentation, technical specifications generator, API documentation tool, Mermaid diagrams, AI project assistant, developer productivity tool, multi-model AI platform, CookFast" />
         <meta name="author" content="Web Vijayi" />
         <meta name="theme-color" content="#FB7A09" />
         <link rel="preconnect" href={SITE_URL} />
         
         {/* OpenGraph Meta Tags */}
-        <meta property="og:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
-        <meta property="og:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers. Cook up your project faster! 📝✨" />
+        <meta property="og:title" content="🍳🚀 CookFast | 30+ AI Models for Project Documentation - GPT-4.1, Claude, Gemini, Grok" />
+        <meta property="og:description" content="🚀 Choose from 30+ cutting-edge AI models including GPT-4.1, o3, Claude Opus 4, Gemini 2.5 Pro, and Grok 4! Generate comprehensive project docs, requirements, architecture plans & technical specs instantly. Free & open source! 🔥📝" />
         <meta property="og:image" content={OG_IMAGE_URL} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -1178,8 +1178,8 @@ export default function CookFastHome() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:site" content="@webvijayi" />
         <meta name="twitter:creator" content="@webvijayi" />
-        <meta name="twitter:title" content="🍳🚀 CookFast | AI-Powered Documentation Generator - Free & Open Source" />
-        <meta name="twitter:description" content="🔥 Transform project ideas into detailed documentation in seconds! Free, open-source tool supporting multiple AI providers." />
+        <meta name="twitter:title" content="🍳🚀 CookFast | 30+ AI Models - GPT-4.1, Claude Opus 4, Gemini 2.5 Pro, Grok 4" />
+        <meta name="twitter:description" content="🚀 Generate project docs with 30+ AI models! Choose from OpenAI's latest GPT-4.1 & o3, Anthropic's Claude Opus 4, Google's Gemini 2.5 Pro, X.ai's Grok 4. Create requirements, architecture & specs instantly! Free & open source 🔥" />
         <meta name="twitter:image" content={OG_IMAGE_URL} />
         <meta name="twitter:image:alt" content="🍳🚀 CookFast - AI-Powered Documentation Generator" />
         

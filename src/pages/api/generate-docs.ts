@@ -73,18 +73,23 @@ interface DocumentSection {
 interface GenerateDocsRequestBody {
   projectDetails: ProjectDetails;
   selectedDocs: DocumentSelection;
-  provider: 'gemini' | 'openai' | 'anthropic';
+  provider: 'gemini' | 'openai' | 'anthropic' | 'xai';
   apiKey: string;
+  modelId?: string; // User-selected model ID
   requestId?: string; // Include requestId
 }
 
-// Constants - Use specified Gemini models
+// Import model configurations
+import { getModel, getDefaultModel } from '@/lib/models';
+
+// Constants - Default models (fallback if user doesn't specify)
 const GEMINI_MODELS = {
   PRIMARY: "gemini-2.5-pro-exp-03-25", // Experimental model
   FALLBACK: "gemini-2.5-pro-preview-03-25" // Paid/Preview model
 };
 const OPENAI_MODEL = "gpt-4.1";
 const ANTHROPIC_MODEL = "claude-3-7-sonnet-20250219"; // Use specific Sonnet 3.7 model from docs
+const XAI_MODEL = "grok-4-0709";
 
 // Safety settings for Gemini
 const safetySettings = [
@@ -98,7 +103,8 @@ const safetySettings = [
 const TOKEN_LIMITS = {
   gemini: 65536, // Common output limit for 2.5 Pro variants
   openai: 16384, // Corrected limit for GPT-4.1 max output tokens (was 32768)
-  anthropic: 128000 // Enabled 128k output beta for Claude 3.7 Sonnet
+  anthropic: 128000, // Enabled 128k output beta for Claude 3.7 Sonnet
+  xai: 32768 // X.ai Grok 4 output limit
 };
 
 // // Simple rate limiter (REMOVED - ineffective in serverless)
@@ -443,23 +449,32 @@ interface ApiResponseType {
   requestId: string;
 }
 
-// Updated generateWithGemini (still relies on prompt for JSON)
+// Updated generateWithGemini with thinking/reasoning support
 async function generateWithGemini(
   apiKey: string,
   modelName: string,
   prompt: string,
   requestId: string,
-  isBackground: boolean
+  isBackground: boolean,
+  maxOutputTokens?: number,
+  modelConfig?: any
 ): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
   console.log(`[${requestId}] [Gemini] Initializing with model: ${modelName}`);
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: modelName, safetySettings });
 
-  const generationConfig = {
+  const generationConfig: any = {
     // temperature: 0.7, // Adjust as needed
-    maxOutputTokens: TOKEN_LIMITS.gemini,
+    maxOutputTokens: maxOutputTokens || TOKEN_LIMITS.gemini,
     // responseMimeType: "application/json", // Ensure JSON output if model supports it
   };
+
+  // Add thinking/reasoning parameters for supported models
+  if (modelConfig?.supportsThinking && modelConfig.thinkingType === 'budget') {
+    generationConfig.thinkingBudget = modelConfig.thinkingParameters?.defaultValue === 'auto (-1)' ? -1 : 
+      (typeof modelConfig.thinkingParameters?.defaultValue === 'number' ? modelConfig.thinkingParameters.defaultValue : -1);
+    console.log(`[${requestId}] [Gemini] Using thinking budget: ${generationConfig.thinkingBudget}`);
+  }
 
   try {
     console.log(`[${requestId}] [Gemini] Sending request...`);
@@ -562,22 +577,27 @@ async function generateWithGemini(
   }
 }
 
-// Updated generateWithOpenAI (using JSON mode)
+// Updated generateWithOpenAI with reasoning support
 async function generateWithOpenAI(
   apiKey: string,
   prompt: string,
   requestId: string,
-  isBackground: boolean
+  isBackground: boolean,
+  modelId?: string,
+  maxOutputTokens?: number,
+  modelConfig?: any
 ): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with OpenAI model: ${OPENAI_MODEL} (JSON Mode Enabled)`);
-  console.log(`[${requestId}] Calling OpenAI API. Model: ${OPENAI_MODEL}, Background: ${isBackground}, Max Tokens: ${TOKEN_LIMITS.openai}`);
+  const model = modelId || OPENAI_MODEL;
+  const maxTokens = maxOutputTokens || TOKEN_LIMITS.openai;
+  console.log(`[${requestId}] Attempting generation with OpenAI model: ${model} (JSON Mode Enabled)`);
+  console.log(`[${requestId}] Calling OpenAI API. Model: ${model}, Background: ${isBackground}, Max Tokens: ${maxTokens}`);
 
   const openai = new OpenAI({ apiKey });
 
   try {
     // Use withRetry utility for better error handling and retries
-    const completionFn = () => openai.chat.completions.create({
-        model: OPENAI_MODEL,
+    const completionOptions: any = {
+        model: model,
         messages: [
           { 
             role: "system", 
@@ -589,9 +609,17 @@ async function generateWithOpenAI(
         }
         ],
       response_format: { type: "json_object" },
-        max_tokens: TOKEN_LIMITS.openai,
+        max_tokens: maxTokens,
       temperature: 0.7,
-    });
+    };
+
+    // Add reasoning effort parameter for o-series models
+    if (modelConfig?.supportsThinking && modelConfig.thinkingType === 'reasoning') {
+      completionOptions.reasoning_effort = modelConfig.thinkingParameters?.defaultValue || 'medium';
+      console.log(`[${requestId}] [OpenAI] Using reasoning effort: ${completionOptions.reasoning_effort}`);
+    }
+
+    const completionFn = () => openai.chat.completions.create(completionOptions);
 
     const completion = await withRetry(completionFn, {
         retries: 2,
@@ -611,7 +639,7 @@ async function generateWithOpenAI(
 
     return {
       responseText,
-      modelUsed: OPENAI_MODEL,
+      modelUsed: model,
       tokens: {
       input: completion.usage?.prompt_tokens || 0,
       output: completion.usage?.completion_tokens || 0,
@@ -625,14 +653,19 @@ async function generateWithOpenAI(
 }
 
 // Timestamp: 2025-05-04T10:12:33Z - Refactored Anthropic generation to use streaming API.
-// Updated generateWithAnthropic (using streaming)
+// Updated generateWithAnthropic with extended thinking support
 async function generateWithAnthropic(
   apiKey: string,
   prompt: string,
   requestId: string,
-  isBackground: boolean
+  isBackground: boolean,
+  modelId?: string,
+  maxOutputTokens?: number,
+  modelConfig?: any
 ): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
-  console.log(`[${requestId}] Attempting generation with Anthropic model: ${ANTHROPIC_MODEL} (Streaming Enabled)`);
+  const model = modelId || ANTHROPIC_MODEL;
+  const maxTokens = maxOutputTokens || TOKEN_LIMITS.anthropic;
+  console.log(`[${requestId}] Attempting generation with Anthropic model: ${model} (Streaming Enabled)`);
   const anthropic = new Anthropic({ apiKey });
 
   let responseText = '';
@@ -642,16 +675,33 @@ async function generateWithAnthropic(
   const timeout = isBackground ? 840000 : 60000; // 14 mins for background, 60s for regular
 
   try {
-    // Add the beta header for 128k output
-    const stream = anthropic.messages.stream({
-      model: ANTHROPIC_MODEL,
-      max_tokens: TOKEN_LIMITS.anthropic,
+    // Prepare message options with thinking support
+    const messageOptions: any = {
+      model: model,
+      max_tokens: maxTokens,
       system: "You are DocuMentor, a specialized technical documentation generator. You MUST output ONLY valid, non-empty JSON objects containing markdown-formatted documentation. Your entire response must be a single, parseable JSON object with at least one document - no text before or after. NEVER return an empty JSON object {}. When generating Application Flow documentation, include multiple Mermaid diagrams with proper syntax in markdown code blocks using ```mermaid for flowcharts and sequence diagrams.",
       messages: [{ role: "user", content: prompt }],
-    }, {
-      headers: {
-        'anthropic-beta': 'output-128k-2025-02-19'
-      }
+    };
+
+    // Add thinking budget for Claude 3.7 Sonnet
+    if (modelConfig?.supportsThinking && modelConfig.thinkingType === 'extended') {
+      messageOptions.thinking_budget = modelConfig.thinkingParameters?.defaultValue === 'auto' ? 'auto' : 
+        (typeof modelConfig.thinkingParameters?.defaultValue === 'number' ? modelConfig.thinkingParameters.defaultValue : 'auto');
+      console.log(`[${requestId}] [Anthropic] Using thinking budget: ${messageOptions.thinking_budget}`);
+    }
+
+    // Add the beta header for 128k output and thinking support
+    const headers: any = {
+      'anthropic-beta': 'output-128k-2025-02-19'
+    };
+
+    // Add thinking beta if model supports it
+    if (modelConfig?.supportsThinking) {
+      headers['anthropic-beta'] = 'output-128k-2025-02-19,thinking-2025-01-23';
+    }
+
+    const stream = anthropic.messages.stream(messageOptions, {
+      headers
     });
 
     // Handle timeout manually for streaming
@@ -720,7 +770,7 @@ async function generateWithAnthropic(
 
     return {
       responseText: responseText,
-      modelUsed: ANTHROPIC_MODEL,
+      modelUsed: model,
       tokens: tokens
     };
 
@@ -731,6 +781,82 @@ async function generateWithAnthropic(
        console.error(`[${requestId}] Anthropic API Error Details: Status=${error.status}, Headers=${JSON.stringify(error.headers)}, Message=${error.message}`);
     }
     throw new Error(`Anthropic API Stream Error: ${error.message}`);
+  }
+}
+
+// X.ai generation function (uses OpenAI-compatible API)
+async function generateWithXai(
+  apiKey: string,
+  prompt: string,
+  requestId: string,
+  isBackground: boolean,
+  modelId?: string,
+  maxOutputTokens?: number,
+  modelConfig?: any
+): Promise<{ responseText: string; modelUsed: string; tokens: { input: number, output: number, total: number } }> {
+  const model = modelId || XAI_MODEL;
+  const maxTokens = maxOutputTokens || TOKEN_LIMITS.xai;
+  console.log(`[${requestId}] Attempting generation with X.ai model: ${model} (Always-on reasoning)`);
+
+  // X.ai uses OpenAI-compatible API but with different base URL
+  const openai = new OpenAI({ 
+    apiKey,
+    baseURL: 'https://api.x.ai/v1'
+  });
+
+  try {
+    const completionOptions: any = {
+      model: model,
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a technical documentation generator that outputs valid JSON only. Your responses must be parseable JSON objects. You have advanced reasoning capabilities that are always active."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: maxTokens,
+      temperature: 0.7,
+    };
+
+    // X.ai Grok models have always-on reasoning, no additional parameters needed
+    if (modelConfig?.supportsThinking && modelConfig.thinkingType === 'always-on') {
+      console.log(`[${requestId}] [X.ai] Using always-on reasoning (built into model)`);
+    }
+
+    const completionFn = () => openai.chat.completions.create(completionOptions);
+
+    const completion = await withRetry(completionFn, {
+      retries: 2,
+      retryDelayMs: 1500,
+      timeoutMs: isBackground ? 840000 : 10000,
+      isBackground
+    });
+
+    const responseText = completion.choices[0]?.message?.content || '';
+    
+    // Validate JSON response
+    try {
+      JSON.parse(responseText);
+    } catch (e) {
+      throw new Error('X.ai response was not valid JSON');
+    }
+
+    return {
+      responseText,
+      modelUsed: model,
+      tokens: {
+        input: completion.usage?.prompt_tokens || 0,
+        output: completion.usage?.completion_tokens || 0,
+        total: completion.usage?.total_tokens || 0
+      }
+    };
+  } catch (error: any) {
+    console.error(`[${requestId}] X.ai generation error:`, error);
+    throw new Error(`X.ai generation failed: ${error.message}`);
   }
 }
 
@@ -759,8 +885,9 @@ export default async function handler(
   console.info(`[${requestId}] Starting documentation generation request`);
 
   try {
-    const { details, selectedDocs, provider = 'openai', apiKey, background = true } = req.body;
+    const { details, selectedDocs, provider = 'openai', apiKey, modelId, background = true } = req.body;
     console.info(`[${requestId}] Background Processing: ${background}`);
+    console.info(`[${requestId}] Selected Model: ${modelId || 'default'}`)
     
     // Log the raw selectedDocs object from the request
     console.log(`[${requestId}] Raw selectedDocs from request:`, JSON.stringify(selectedDocs));
@@ -830,6 +957,25 @@ export default async function handler(
           // Log the first 500 chars of the prompt
     console.log(`[${requestId}] Prompt preview (first 500 chars): ${prompt.substring(0, 500)}...`);
 
+    // Get the selected model or use defaults
+    let selectedModelConfig;
+    if (modelId) {
+      selectedModelConfig = getModel(provider as 'gemini' | 'openai' | 'anthropic' | 'xai', modelId);
+      if (!selectedModelConfig) {
+        console.warn(`[${requestId}] Model ${modelId} not found for ${provider}, using default`);
+        selectedModelConfig = getDefaultModel(provider as 'gemini' | 'openai' | 'anthropic' | 'xai');
+      }
+    } else {
+      selectedModelConfig = getDefaultModel(provider as 'gemini' | 'openai' | 'anthropic' | 'xai');
+    }
+    
+    console.log(`[${requestId}] Using model: ${selectedModelConfig.id} (${selectedModelConfig.name})`);
+    
+    // Log thinking capabilities if available
+    if (selectedModelConfig.supportsThinking) {
+      console.log(`[${requestId}] Model supports thinking: ${selectedModelConfig.thinkingType} (${selectedModelConfig.thinkingParameters?.parameter})`);
+    }
+    
     // Process response based on provider
     let result: { responseText: string; modelUsed: string; tokens: { input: number; output: number; total: number } };
         
@@ -838,24 +984,28 @@ export default async function handler(
           try {
     switch (provider.toLowerCase()) {
         case 'gemini':
-          // Try the primary model first, fall back to alternative if needed
+          // Try the selected model first
           try {
-                  result = await generateWithGemini(apiKey, GEMINI_MODELS.PRIMARY, prompt, requestId, true);
+                  result = await generateWithGemini(apiKey, selectedModelConfig.id, prompt, requestId, true, selectedModelConfig.maxTokens, selectedModelConfig);
           } catch (error: any) {
             console.log(`[${requestId}] Primary Gemini model failed, trying fallback: ${error.message}`);
                   result = await generateWithGemini(apiKey, GEMINI_MODELS.FALLBACK, prompt, requestId, true);
           }
           break;
       case 'openai':
-                result = await generateWithOpenAI(apiKey, prompt, requestId, true);
+                result = await generateWithOpenAI(apiKey, prompt, requestId, true, selectedModelConfig.id, selectedModelConfig.maxTokens, selectedModelConfig);
         break;
       case 'anthropic':
-                result = await generateWithAnthropic(apiKey, prompt, requestId, true);
+                result = await generateWithAnthropic(apiKey, prompt, requestId, true, selectedModelConfig.id, selectedModelConfig.maxTokens, selectedModelConfig);
+        break;
+      case 'xai':
+        // X.ai uses dedicated generation function with always-on reasoning
+        result = await generateWithXai(apiKey, prompt, requestId, true, selectedModelConfig.id, selectedModelConfig.maxTokens, selectedModelConfig);
         break;
       default:
                 const errorData = {
             status: 'failed',
-                  message: `Invalid provider: ${provider}. Supported providers are: gemini, openai, anthropic`,
+                  message: `Invalid provider: ${provider}. Supported providers are: gemini, openai, anthropic, xai`,
             requestId
                 };
         await saveGenerationResult(requestId, errorData);
