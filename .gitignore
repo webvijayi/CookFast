@@ -48,6 +48,9 @@ debug.log
 .env*.local
 
 # vercel
+
+# Claude
+.claude/
 .vercel
 
 # typescript
