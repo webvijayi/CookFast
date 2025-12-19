@@ -9,18 +9,19 @@ CookFast is an AI-powered tool that automatically generates comprehensive projec
 ## ✨ Features
 
 *   **Multiple AI Providers:** Choose between Google Gemini, OpenAI, Anthropic, and X.ai models with extensive model selection.
-    *   **OpenAI Models:** GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, o3, o3 Pro, o3 Mini, o4 Mini, o4 Mini High, o1, GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
-    *   **Google Gemini Models:** Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite, Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash
-    *   **Anthropic Models:** Claude Opus 4.5, Claude Opus 4, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Haiku
-    *   **X.ai Models:** Grok 4, Grok 3, Grok 3 Mini
+    *   **OpenAI Models:** GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-4.1, o3, o3 Pro, o3 Mini, o3 Deep Research, o4 Mini, o4 Mini High, o4 Mini Deep Research, GPT-4o, GPT-4o Mini
+    *   **Google Gemini Models:** Gemini 3 Pro, Gemini 3 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite, Gemini 2.0 Flash
+    *   **Anthropic Models:** Claude Opus 4.5, Claude Opus 4.1, Claude Opus 4, Claude Sonnet 4.5, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku
+    *   **X.ai Models:** Grok 4.1, Grok 4.1 Fast, Grok 4, Grok 4 Fast, Grok 3, Grok 3 Mini
 *   **Extended Context Windows & Model Selection:** Choose from models with varying capabilities:
-    *   **OpenAI GPT-4.1:** 1M tokens context, 32K output tokens - Latest with improved coding
+    *   **OpenAI GPT-5:** 256K tokens context, 32K output tokens - Most intelligent with reasoning and persistent memory
     *   **OpenAI o3/o3 Pro:** 200K tokens context, 65K output tokens - Advanced reasoning models
-    *   **Gemini 2.5 Pro:** 1M+ tokens context, 65K output tokens - State-of-the-art with always-on thinking
-    *   **Gemini 2.5 Flash:** 1M+ tokens context, 65K output tokens - Configurable thinking budget
-    *   **Claude Opus 4:** 200K tokens context, 128K output tokens - Most capable with hybrid reasoning
-    *   **Claude Sonnet 4:** 200K tokens context, 128K output tokens - High performance hybrid reasoning
-    *   **X.ai Grok 4:** 256K tokens context, 32K output tokens - Always-on reasoning capabilities
+    *   **Gemini 3 Flash:** 1M tokens context, 64K output tokens - Frontier intelligence with thinking_level control
+    *   **Gemini 3 Pro:** 1M tokens context, 64K output tokens - Most capable Gemini with thinking_level
+    *   **Claude Opus 4.5:** 200K tokens context, 64K output tokens - 80.9% SWE-bench, effort parameter (low/medium/high)
+    *   **Claude Sonnet 4.5:** 200K tokens context, 128K output tokens - Best for coding, agents, computer use
+    *   **X.ai Grok 4.1:** 256K tokens context, 32K output tokens - Enhanced agentic tool calling
+    *   **X.ai Grok 4.1 Fast:** 2M tokens context, 32K output tokens - Speed-optimized with reasoning toggle
 *   **Flexible Document Selection:** Select the specific planning documents you need, such as:
     *   Project Requirements Document
     *   Frontend Guidelines
@@ -59,29 +60,32 @@ The name 'CookFast' comes from the idea that it helps you 'cook up' (prepare) th
 CookFast supports four major AI providers with extensive model selection:
 
 **OpenAI Models:**
+- GPT-5/GPT-5 Mini/GPT-5 Nano (256K context, up to 32K output) - Most intelligent with reasoning
 - GPT-4.1 (1M context, 32K output) - Latest flagship with improved coding
 - o3/o3 Pro/o3 Mini (200K context, 65K output) - Advanced reasoning models
+- o3 Deep Research/o4 Mini Deep Research - Multi-step research with citations
 - o4 Mini/o4 Mini High (200K context, 32K output) - Optimized reasoning models
 - GPT-4o/GPT-4o Mini (128K context, 16K output) - Multimodal capabilities
-- Legacy models: GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
 
 **Google Gemini Models:**
+- Gemini 3 Pro/Gemini 3 Flash (1M context, 64K output) - Frontier with thinking_level parameter
 - Gemini 2.5 Pro (1M+ context, 65K output) - Always-on thinking
 - Gemini 2.5 Flash (1M+ context, 65K output) - Configurable thinking budget
 - Gemini 2.0 Flash (1M context, 32K output) - Next-gen with native tool use
-- Legacy models: Gemini 1.5 Pro, Gemini 1.5 Flash
 
 **Anthropic Models:**
-- Claude Opus 4.5 (200K context, 128K output) - Frontier reasoning with extended thinking
+- Claude Opus 4.5 (200K context, 64K output) - 80.9% SWE-bench, effort parameter
+- Claude Opus 4.1 (200K context, 128K output) - Enhanced for agentic tasks
 - Claude Opus 4 (200K context, 128K output) - Most capable with hybrid reasoning
+- Claude Sonnet 4.5 (200K context, 128K output) - Best for coding and agents
 - Claude Sonnet 4 (200K context, 128K output) - High performance hybrid reasoning
 - Claude 3.7 Sonnet (200K context, 64K output) - Extended reasoning enabled
-- Legacy models: Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus
 
 **X.ai Models:**
-- Grok 4 (256K context, 32K output) - Frontier-level with always-on reasoning
-- Grok 3 (1M context, 16K output) - Advanced reasoning capabilities
-- Grok 3 Mini (128K context, 8K output) - Cost-efficient reasoning
+- Grok 4.1 (256K context, 32K output) - Enhanced agentic tool calling
+- Grok 4.1 Fast (2M context, 32K output) - Speed-optimized with reasoning toggle
+- Grok 4/Grok 4 Fast (256K-2M context, 32K output) - Frontier-level reasoning
+- Grok 3/Grok 3 Mini (128K-1M context, up to 16K output) - Cost-efficient reasoning
 
 ### 6. Do I need to provide my own API keys?
 Yes, you'll need to provide your own API key for the AI provider you choose to use. This ensures your data security and gives you control over which AI model processes your project information.
