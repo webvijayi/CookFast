@@ -91,6 +91,48 @@ export const AVAILABLE_MODELS: ProviderModels = {
   ],
   openai: [
     {
+      id: "gpt-5",
+      name: "GPT-5",
+      description: "Most intelligent model with 256K context, multimodal, integrated tools, and persistent memory",
+      maxTokens: 32768,
+      contextWindow: 256000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_effort',
+        defaultValue: 'medium',
+        range: 'minimal, low, medium, high'
+      }
+    },
+    {
+      id: "gpt-5-mini",
+      name: "GPT-5 Mini",
+      description: "Smaller, faster version of GPT-5 with reasoning capabilities",
+      maxTokens: 16384,
+      contextWindow: 256000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_effort',
+        defaultValue: 'medium',
+        range: 'minimal, low, medium, high'
+      }
+    },
+    {
+      id: "gpt-5-nano",
+      name: "GPT-5 Nano",
+      description: "Fastest and most cost-effective GPT-5 variant",
+      maxTokens: 8192,
+      contextWindow: 256000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_effort',
+        defaultValue: 'low',
+        range: 'minimal, low, medium, high'
+      }
+    },
+    {
       id: "gpt-4.1",
       name: "GPT-4.1",
       description: "Latest GPT-4 with improved coding, instruction following, and 1M context window",
@@ -201,6 +243,34 @@ export const AVAILABLE_MODELS: ProviderModels = {
       }
     },
     {
+      id: "o3-deep-research",
+      name: "OpenAI o3 Deep Research",
+      description: "Multi-step web and document research with citations - optimized for complex analysis tasks",
+      maxTokens: 65536,
+      contextWindow: 200000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_effort',
+        defaultValue: 'high',
+        range: 'low, medium, high'
+      }
+    },
+    {
+      id: "o4-mini-deep-research",
+      name: "OpenAI o4 Mini Deep Research",
+      description: "Faster, affordable deep research for multi-step research tasks with progress streaming",
+      maxTokens: 32768,
+      contextWindow: 200000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_effort',
+        defaultValue: 'medium',
+        range: 'low, medium, high'
+      }
+    },
+    {
       id: "o1",
       name: "OpenAI o1",
       description: "Previous generation reasoning model - reasoning enabled by default (effort: low/medium/high)",
@@ -263,9 +333,37 @@ export const AVAILABLE_MODELS: ProviderModels = {
       }
     },
     {
+      id: "claude-opus-4-1-20250805",
+      name: "Claude Opus 4.1",
+      description: "Enhanced Opus 4 for agentic tasks, real-world coding, and improved search reasoning",
+      maxTokens: 128000,
+      contextWindow: 200000,
+      supportsThinking: true,
+      thinkingType: 'extended',
+      thinkingParameters: {
+        parameter: 'budget_tokens',
+        defaultValue: 'auto',
+        range: 'auto or positive integer up to 128k'
+      }
+    },
+    {
       id: "claude-opus-4-20250514",
       name: "Claude Opus 4",
       description: "Most capable model with hybrid reasoning - thinking enabled by default (budget_tokens parameter)",
+      maxTokens: 128000,
+      contextWindow: 200000,
+      supportsThinking: true,
+      thinkingType: 'extended',
+      thinkingParameters: {
+        parameter: 'budget_tokens',
+        defaultValue: 'auto',
+        range: 'auto or positive integer up to 128k'
+      }
+    },
+    {
+      id: "claude-sonnet-4-5-20250929",
+      name: "Claude Sonnet 4.5",
+      description: "Most capable Sonnet for coding, agents, and computer use with hybrid reasoning",
       maxTokens: 128000,
       contextWindow: 200000,
       supportsThinking: true,
@@ -339,6 +437,42 @@ export const AVAILABLE_MODELS: ProviderModels = {
   ],
   xai: [
     {
+      id: "grok-4-1",
+      name: "Grok 4.1",
+      description: "Latest flagship model with enhanced agentic tool calling and 256K context",
+      maxTokens: 32768,
+      contextWindow: 256000,
+      supportsThinking: true,
+      thinkingType: 'always-on',
+      thinkingParameters: {
+        parameter: 'reasoning cannot be disabled',
+        defaultValue: 'auto',
+        range: 'always active'
+      }
+    },
+    {
+      id: "grok-4-1-fast-reasoning",
+      name: "Grok 4.1 Fast (Reasoning)",
+      description: "Speed-optimized with 2M context, multi-step reasoning, and agentic tools (web/X search, code execution)",
+      maxTokens: 32768,
+      contextWindow: 2000000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_enabled',
+        defaultValue: 'true',
+        range: 'true, false'
+      }
+    },
+    {
+      id: "grok-4-1-fast-non-reasoning",
+      name: "Grok 4.1 Fast (Non-Reasoning)",
+      description: "Low-latency variant with 2M context for instant responses without reasoning step",
+      maxTokens: 32768,
+      contextWindow: 2000000,
+      supportsThinking: false
+    },
+    {
       id: "grok-4-0709",
       name: "Grok 4",
       description: "Most intelligent model with frontier-level multimodal understanding and always-on reasoning",
@@ -351,6 +485,28 @@ export const AVAILABLE_MODELS: ProviderModels = {
         defaultValue: 'auto',
         range: 'always active'
       }
+    },
+    {
+      id: "grok-4-fast-reasoning",
+      name: "Grok 4 Fast (Reasoning)",
+      description: "Speed-optimized Grok 4 with 2M context and reasoning enabled",
+      maxTokens: 32768,
+      contextWindow: 2000000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'reasoning_enabled',
+        defaultValue: 'true',
+        range: 'true, false'
+      }
+    },
+    {
+      id: "grok-4-fast-non-reasoning",
+      name: "Grok 4 Fast (Non-Reasoning)",
+      description: "Speed-optimized Grok 4 with 2M context for instant responses",
+      maxTokens: 32768,
+      contextWindow: 2000000,
+      supportsThinking: false
     },
     {
       id: "grok-3",
@@ -386,9 +542,9 @@ export const AVAILABLE_MODELS: ProviderModels = {
 // Default models for each provider (fallback if user doesn't select)
 export const DEFAULT_MODELS = {
   gemini: "gemini-2.5-pro",
-  openai: "gpt-4.1",
+  openai: "gpt-5",
   anthropic: "claude-opus-4-5-20251101",
-  xai: "grok-4-0709"
+  xai: "grok-4-1"
 };
 
 // Get model by ID

@@ -133,7 +133,7 @@ No. API keys are validated client-side and never stored by CookFast. They are se
 
 ## 🌐 Live Demo
 
-**[https://cook-fast.netlify.app/](https://cook-fast.netlify.app/)**
+**[https://cookfa.st](https://cookfa.st)**
 
 ### How to Use
 
