@@ -23,6 +23,34 @@ export interface ProviderModels {
 export const AVAILABLE_MODELS: ProviderModels = {
   gemini: [
     {
+      id: "gemini-3-pro-preview",
+      name: "Gemini 3 Pro",
+      description: "Most capable Gemini model with 1M context and thinking_level parameter (minimal/low/medium/high)",
+      maxTokens: 64000,
+      contextWindow: 1000000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'thinking_level',
+        defaultValue: 'medium',
+        range: 'minimal, low, medium, high'
+      }
+    },
+    {
+      id: "gemini-3-flash-preview",
+      name: "Gemini 3 Flash",
+      description: "Frontier intelligence with thinking_level control - $0.50/1M input, $3/1M output (free tier available)",
+      maxTokens: 64000,
+      contextWindow: 1000000,
+      supportsThinking: true,
+      thinkingType: 'reasoning',
+      thinkingParameters: {
+        parameter: 'thinking_level',
+        defaultValue: 'medium',
+        range: 'minimal, low, medium, high'
+      }
+    },
+    {
       id: "gemini-2.5-pro",
       name: "Gemini 2.5 Pro",
       description: "State-of-the-art thinking model with enhanced reasoning (always-on thinking)",
@@ -321,15 +349,15 @@ export const AVAILABLE_MODELS: ProviderModels = {
     {
       id: "claude-opus-4-5-20251101",
       name: "Claude Opus 4.5",
-      description: "Most capable and intelligent model - frontier reasoning with extended thinking (budget_tokens parameter)",
-      maxTokens: 128000,
+      description: "Most intelligent model - 80.9% SWE-bench, hybrid reasoning with effort parameter, 66% cheaper than Opus 4.1",
+      maxTokens: 64000,
       contextWindow: 200000,
       supportsThinking: true,
       thinkingType: 'extended',
       thinkingParameters: {
-        parameter: 'budget_tokens',
-        defaultValue: 'auto',
-        range: 'auto or positive integer up to 128k'
+        parameter: 'effort',
+        defaultValue: 'medium',
+        range: 'low, medium, high'
       }
     },
     {
@@ -541,7 +569,7 @@ export const AVAILABLE_MODELS: ProviderModels = {
 
 // Default models for each provider (fallback if user doesn't select)
 export const DEFAULT_MODELS = {
-  gemini: "gemini-2.5-pro",
+  gemini: "gemini-3-flash-preview",
   openai: "gpt-5",
   anthropic: "claude-opus-4-5-20251101",
   xai: "grok-4-1"
