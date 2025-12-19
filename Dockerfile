@@ -1,19 +1,19 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 WORKDIR /app
+
+# Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --only=production=false
+
+# Copy source code
 COPY . .
+
+# Build the application
 RUN npm run build
 
-FROM node:20-alpine AS runner
-WORKDIR /app
+# Set production environment
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy built assets
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
