@@ -11,7 +11,7 @@ CookFast is an AI-powered tool that automatically generates comprehensive projec
 *   **Multiple AI Providers:** Choose between Google Gemini, OpenAI, Anthropic, and X.ai models with extensive model selection.
     *   **OpenAI Models:** GPT-4.1, GPT-4.1 Mini, GPT-4.1 Nano, o3, o3 Pro, o3 Mini, o4 Mini, o4 Mini High, o1, GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-4, GPT-3.5 Turbo
     *   **Google Gemini Models:** Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash-Lite, Gemini 2.0 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash
-    *   **Anthropic Models:** Claude Opus 4, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Haiku
+    *   **Anthropic Models:** Claude Opus 4.5, Claude Opus 4, Claude Sonnet 4, Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus, Claude 3 Haiku
     *   **X.ai Models:** Grok 4, Grok 3, Grok 3 Mini
 *   **Extended Context Windows & Model Selection:** Choose from models with varying capabilities:
     *   **OpenAI GPT-4.1:** 1M tokens context, 32K output tokens - Latest with improved coding
@@ -72,6 +72,7 @@ CookFast supports four major AI providers with extensive model selection:
 - Legacy models: Gemini 1.5 Pro, Gemini 1.5 Flash
 
 **Anthropic Models:**
+- Claude Opus 4.5 (200K context, 128K output) - Frontier reasoning with extended thinking
 - Claude Opus 4 (200K context, 128K output) - Most capable with hybrid reasoning
 - Claude Sonnet 4 (200K context, 128K output) - High performance hybrid reasoning
 - Claude 3.7 Sonnet (200K context, 64K output) - Extended reasoning enabled
@@ -162,7 +163,45 @@ Found CookFast helpful? Here are a few ways you can support the project:
 
 ## 🚀 Deployment
 
-This application is configured for deployment on platforms like Netlify or Vercel which support Next.js applications with API routes. The code is designed to be easily deployable on platforms like Vercel, Netlify, or your own server.
+This application is configured for deployment on platforms like Netlify, Vercel, or self-hosted solutions like Coolify.
+
+### Docker Deployment
+
+CookFast includes a Dockerfile for easy containerized deployment:
+
+```bash
+# Build the Docker image
+docker build -t cookfast .
+
+# Run the container
+docker run -p 3000:3000 cookfast
+```
+
+Or use Docker Compose:
+
+```yaml
+version: '3.8'
+services:
+  cookfast:
+    build: .
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+```
+
+### Coolify Deployment
+
+CookFast is optimized for deployment on [Coolify](https://coolify.io/):
+
+1. Create a new application in Coolify
+2. Connect to the GitHub repository: `webvijayi/CookFast`
+3. Coolify will automatically detect the Dockerfile
+4. Configure your domain and SSL
+5. Deploy!
+
+### Netlify/Vercel Deployment
+
+The code is designed to be easily deployable on platforms like Vercel or Netlify with zero configuration.
 
 ### Netlify Blobs Integration
 

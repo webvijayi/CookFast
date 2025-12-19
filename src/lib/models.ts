@@ -249,9 +249,23 @@ export const AVAILABLE_MODELS: ProviderModels = {
   ],
   anthropic: [
     {
+      id: "claude-opus-4-5-20251101",
+      name: "Claude Opus 4.5",
+      description: "Most capable and intelligent model - frontier reasoning with extended thinking (budget_tokens parameter)",
+      maxTokens: 128000,
+      contextWindow: 200000,
+      supportsThinking: true,
+      thinkingType: 'extended',
+      thinkingParameters: {
+        parameter: 'budget_tokens',
+        defaultValue: 'auto',
+        range: 'auto or positive integer up to 128k'
+      }
+    },
+    {
       id: "claude-opus-4-20250514",
       name: "Claude Opus 4",
-      description: "Most capable and intelligent model with hybrid reasoning - thinking enabled by default (budget_tokens parameter)",
+      description: "Most capable model with hybrid reasoning - thinking enabled by default (budget_tokens parameter)",
       maxTokens: 128000,
       contextWindow: 200000,
       supportsThinking: true,
@@ -373,7 +387,7 @@ export const AVAILABLE_MODELS: ProviderModels = {
 export const DEFAULT_MODELS = {
   gemini: "gemini-2.5-pro",
   openai: "gpt-4.1",
-  anthropic: "claude-sonnet-4-20250514",
+  anthropic: "claude-opus-4-5-20251101",
   xai: "grok-4-0709"
 };
 
